@@ -15,6 +15,91 @@ mfr2=fread('/Applications/plab/data/swed/ver/mfr_150202_recored_main_filtered_F.
 
 mfr2=subset(mfr2, AR>1989)
 
+# ---------------
+# TODO check: moved some covariate prep here
+
+# Birth year
+mfr2$BFODDAT = ymd(mfr2$BFODDAT)
+
+#BMI
+
+mfr2=mfr2 %>% add_column(BMI=as.numeric(mfr2$MVIKT/((mfr2$MLANGD/100)^2)))
+
+# BMI imputing
+# JJ: clever idea, but I had to code it up safer
+mfr2 = group_by(mfr2, lpnr_mor) %>%
+	summarize(mh = mean(MLANGD, na.rm=T)) %>%
+	ungroup() %>%
+	right_join(mfr2, by="lpnr_mor")
+
+mfr2$BMI= with(mfr2, ifelse(is.na(BMI), MVIKT/((mh/100)^2), BMI))
+
+# spont
+mfr2$spont = mfr2$FLSPONT=="1" & !is.na(mfr2$FLSPONT)
+
+#not born in sweden, unemployed, smoking
+temp=subset(mfr2, MFODLAND!="SVERIGE")
+mfr2$notborninswe = mfr2$lpnr_mor %in% temp$lpnr_mor
+rm(temp)
+
+mfr2$unemployed = mfr2$ARBETE=="3" & !is.na(mfr2$ARBETE)
+
+mfr2$smoke = mfr2$ROK1!="1" & !is.na(mfr2$ROK1)
+
+#boy child, fetal malformation
+mfr2$boychild = mfr2$KON=="1" & !is.na(mfr2$KON)
+
+mfr2$malform  = mfr2$MISSB=="1" & !is.na(mfr2$KON)
+
+
+#diabetes, hypertension, gestational hypertension, preeclampsia, allHTN
+
+# TODO need to fix this filter to not use all columns!
+# e.g. values like "642" might appear in lpnr codes
+ICD_COL_NAMES = c()  # TODO write them like c("COL1", "COL2")
+
+DIAB_CODES = c('E107','O240','O241','O243','O244','O249','O240B','O240C','O240D',
+	       	'O240E','O240F','O240X','O244A','O244B','O244X','25000','25009',
+		'76110','250A','250B','250C','250D','250E','250F','250X','648A')
+mfr2 = mfr2 %>% mutate(diabetes = if_any(ICD_COL_NAMES, ~ . %in% DIAB_CODES) | DIABETES=="1" | DIABETES=="2")
+
+
+HTN_CODES = c('I10','I109','401','401X','40199')
+mfr2$HTN = mfr2 %>% mutate(if_any(ICD_COL_NAMES, ~ . %in% HTN_CODES) | HYPERTON=="1" | HYPERTON=="2")
+
+
+GHTN_CODES = c('O139','642','642A','642B','642C','642D','642X','63701')
+mfr2$GHTN = mfr2 %>% mutate(if_any(ICD_COL_NAMES, ~ . %in% GHTN_CODES))
+
+PE_CODES = c('O14','O140','O141','O142','O149','O141A','O141B','O141X','642E',
+	     '642F','642G','642H','63703','63704','63709','63710','63799','76210','76220','76230')
+mfr2$PE = mfr2 %>% mutate(if_any(ICD_COL_NAMES, ~ . %in% PE_CODES))
+
+mfr2$allHTN = with(mfr2, HTN | GHTN | PE)
+mfr2$allHTN[which(is.na(mfr2$allHTN))] = F
+
+#------------------------------
+
+#SGA and LGA according to Marsal
+
+marsal = function(GRDBS,BVIKT,boychild){
+    if(boychild){
+        mw=-1.907345e-6*GRDBS^4 + 1.140644e-3*GRDBS^3 - 1.336265e-1*GRDBS^2 + 1.976961*GRDBS + 2.410053e+2
+    } else {
+        mw=-2.761948e-6*GRDBS^4 + 1.744841e-3*GRDBS^3 - 2.893626e-1*GRDBS^2 + 18.91197*GRDBS - 4.135122e+2
+    }
+    pnorm(BVIKT, mw, abs(0.12*mw))*100
+}
+
+mfr2$PCTmarsal = sapply(1:nrow(mfr2), function(x) marsal(mfr2$GRDBS[x],mfr2$BVIKT[x],mfr2$boychild[x]))
+
+mfr2$SGAmarsal= mfr2$PCTmarsal < pnorm(-2) *100
+mfr2$LGAmarsal= mfr2$PCTmarsal > pnorm(2) *100
+
+
+
+#------------------------------
+
 grav1=subset(mfr2, parity_clean=="1")
 grav1=subset(grav1, GRDBS>="259")	
 
@@ -24,40 +109,39 @@ temp=subset(grav2, OFRIABEF=="1"|OFRISTIM=="1"|OFRIKIRU=="1"|OFRIICSI=="1"|OFRIA
 grav2=subset(grav2, !lpnr_mor %in% temp$lpnr_mor)
 rm(temp)
 
-grav1=subset(grav1, lpnr_mor!="NA")			
-grav2=subset(grav2, lpnr_mor!="NA")
+grav1=subset(grav1, !is.na(lpnr_mor) & lpnr_mor!="NA")
+grav2=subset(grav2, !is.na(lpnr_mor) & lpnr_mor!="NA")
 
 grav1=grav1[!duplicated(grav1$lpnr_mor),]
 grav2=grav2[!duplicated(grav2$lpnr_mor),]
 
-grav1=semi_join(grav1,grav2,by="lpnr_mor")
-grav2=semi_join(grav2,grav1,by="lpnr_mor")
+#------------
+# TODO safer code, check
+#grav1=semi_join(grav1,grav2,by="lpnr_mor")
+#grav2=semi_join(grav2,grav1,by="lpnr_mor")
+#
+#grav1=grav1[order(grav1$lpnr_mor),]
+#grav2=grav2[order(grav2$lpnr_mor),]
+#
+#mydata=data.frame(lpnr_mor=grav1$lpnr_mor)
+#
+#mydata=mydata %>% add_column(GRDBSpreg1=grav1$GRDBS, GRDBSpreg2=grav2$GRDBS)
+#
 
-grav1=grav1[order(grav1$lpnr_mor),]
-grav2=grav2[order(grav2$lpnr_mor),]
+mydata = inner_join(grav1[,c("lpnr_mor", "GRDBS", "AR", "MALDER", "BFODDAT", "BVIKT", "spont", "notborninswe", "unemployed", "smoke", "boychild", "malform", "allHTN", "SGAmarsal", "LGAmarsal")],
+		    grav2[,c("lpnr_mor", "GRDBS", "AR", "MALDER", "BFODDAT", "BVIKT", "spont", "notborninswe", "unemployed", "smoke", "boychild", "malform", "allHTN", "SGAmarsal", "LGAmarsal")],
+		    by="lpnr_mor", suffix=c("preg1", "preg2"))
 
-mydata=data.frame(lpnr_mor=grav1$lpnr_mor)
 
-mydata=mydata %>% add_column(GRDBSpreg1=grav1$GRDBS, GRDBSpreg2=grav2$GRDBS)
+#------------
 
-temp1=subset(grav1,SECMARK=="1")
-temp2=subset(grav2,TSECTIO=="1")
-temp3=rbind(temp1,temp2)
-temp4=temp3[!duplicated(temp3$lpnr_mor),]
 
-mydata$CSpreg1 = mydata$lpnr_mor %in% temp4$lpnr_mor
-rm(temp1,temp2,temp3,temp4)
+temp=subset(grav1, SECMARK=="1" | TSECTIO=="1")
+mydata$CSpreg1 = mydata$lpnr_mor %in% temp$lpnr_mor
+rm(temp)
 
 temp=subset(grav2, SECMARK=="1")
 mydata$CSpreg2 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav1, FLSPONT=="1")
-mydata$spontpreg1= mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav2, FLSPONT=="1")
-mydata$spontpreg2= mydata$lpnr_mor %in% temp$lpnr_mor
 rm(temp)
 
 
@@ -76,36 +160,16 @@ mydata$w42 = mydata$GRDBSpreg2>=294
 #below is for adjusting for confounders
 #year of birth, maternal age, dates of birth, birth weight
 
-mydata=mydata %>% add_column(ARpreg1=grav1$AR, ARpreg2=grav2$AR,
-			     MALDERpreg1=grav1$MALDER, MALDERpreg2=grav2$MALDER,
-			     BFODDATpreg1=grav1$BFODDAT, BFODDATpreg2=grav2$BFODDAT,
-			     BVIKTpreg1=grav1$BVIKT, BVIKTpreg2=grav2$BVIKT)
-
 #interpregnancy interval
-mydata$BFODDATpreg1=ymd(mydata$BFODDATpreg1)
-mydata$BFODDATpreg2=ymd(mydata$BFODDATpreg2)
 mydata=mydata %>% add_column(intpregint=difftime(mydata$BFODDATpreg2, mydata$BFODDATpreg1, days)-mydata$GRDBSpreg2)
 mydata$intpregint=as.numeric(mydata$intpregint, units="days")
 mydata=mydata %>% add_column(intpregintmonths=mydata$intpregint/30.43)
 
 
-#BMI
+# BMI imputing
 
-mydata=mydata %>% add_column(BMIpreg1=grav1$MVIKT/((grav1$MLANGD/100)^2), BMIpreg2=grav2$MVIKT/((grav2$MLANGD/100)^2))
-
-mydata$BMIpreg1.2 = ifelse(is.na(mydata$BMIpreg1), grav1$MVIKT/((grav2$MLANGD/100)^2), mydata$BMIpreg1)
-mydata$BMIpreg2.2 = ifelse(is.na(mydata$BMIpreg2), grav2$MVIKT/((grav1$MLANGD/100)^2), mydata$BMIpreg2)
-mydata=subset(mydata, select=-c(BMIpreg1,BMIpreg2))
-mydata=mydata %>% rename(BMIpreg1=BMIpreg1.2)
-mydata=mydata %>% rename(BMIpreg2=BMIpreg2.2)
-mydata$BMIpreg1=formatC(mydata$BMIpreg1, digits=1, format="f")
-mydata$BMIpreg2=formatC(mydata$BMIpreg2, digits=1, format="f")
-
-mydata$BMIpreg1[mydata$BMIpreg1=="NA"]=23.47
-mydata$BMIpreg2[mydata$BMIpreg2=="NA"]=24.12
-mydata$BMIpreg1=as.numeric(mydata$BMIpreg1)
-mydata$BMIpreg2=as.numeric(mydata$BMIpreg2)
-
+mydata$BMIpreg1[which(is.na(mydata$BMIpreg1))] = mean(mydata$BMIpreg1, na.rm=T) # should be 23.5
+mydata$BMIpreg2[which(is.na(mydata$BMIpreg2))] = mean(mydata$BMIpreg2, na.rm=T) # should be 24.2
 
 #BMI groups
 
@@ -124,165 +188,40 @@ mydata$BMIpreg2.5 = mydata$BMIpreg2>=35.0 & mydata$BMIpreg2<40.0
 mydata$BMIpreg2.6 = mydata$BMIpreg2>=40.0 & mydata$BMIpreg2<99
 
 
-#BMI increase and BMI decrease
-
-temp1=subset(mydata, BMIpreg1.1|BMIpreg1.2|BMIpreg1.3|BMIpreg1.4|BMIpreg1.5|BMIpreg1.6)
-temp2=subset(mydata, BMIpreg2.1|BMIpreg2.2|BMIpreg2.3|BMIpreg2.4|BMIpreg2.5|BMIpreg2.6)
-
-temp1=semi_join(temp1,temp2,by="lpnr_mor")
-temp2=semi_join(temp2,temp1,by="lpnr_mor")
-
-# TODO check about these 99 placeholders here!!
-temp3=data.frame(lpnr_mor=temp1$lpnr_mor,
-                                  BMIscorepreg1=ifelse(temp1$BMIpreg1.1,1,
-						ifelse(temp1$BMIpreg1.2,2,
-						ifelse(temp1$BMIpreg1.3,3,
-						ifelse(temp1$BMIpreg1.4,4,
-						ifelse(temp1$BMIpreg1.5,5,
-						ifelse(temp1$BMIpreg1.6,6,99)))))),
-                                  BMIscorepreg2=ifelse(temp2$BMIpreg2.1,1,
-						ifelse(temp2$BMIpreg2.2,2,
-						ifelse(temp2$BMIpreg2.3,3,
-						ifelse(temp2$BMIpreg2.4,4,
-						ifelse(temp2$BMIpreg2.5,5,
-						ifelse(temp2$BMIpreg2.6,6,99))))))
-)
-
-temp3=temp3 %>% add_column(BMIdiff=temp3$BMIscorepreg2-temp3$BMIscorepreg1)
-temp3=temp3 %>% add_column(BMIinc=temp3$BMIdiff>0, BMIdec=temp3$BMIdiff<0)
-
-temp4=subset(temp3, BMIinc)
-temp5=subset(temp3, BMIdec)
-
-mydata$BMIinc = mydata$lpnr_mor %in% temp4$lpnr_mor
-mydata$BMIdec = mydata$lpnr_mor %in% temp5$lpnr_mor
-
-rm(temp1,temp2,temp3,temp4,temp5)
-
-
-#not born in sweden, unemployed, smoking
-temp=subset(grav1, MFODLAND!="SVERIGE")
-mydata$notborninswepreg1 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav2, MFODLAND!="SVERIGE")
-mydata$notborninswepreg2 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav1, ARBETE=="3")
-mydata$unemployedpreg1 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav2, ARBETE=="3")
-mydata$unemployedpreg2 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav1, ROK1!="1")
-mydata$smokepreg1 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav2, ROK1!="1")
-mydata$smokepreg2 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-
-#diabetes, hypertension, gestational hypertension, preeclampsia, allHTN
-
-# TODO fix this filter to not use any_vars!
-temp1=subset(grav1, DIABETES=="1"|DIABETES=="2")
-temp2=grav1 %>% filter_all(any_vars(. %in% c('E107','O240','O241','O243','O244','O249','O240B','O240C','O240D','O240E','O240F','O240X','O244A','O244B','O244X','25000','25009','76110','250A','250B','250C','250D','250E','250F','250X','648A')))
-temp3=rbind(temp1,temp2)
-temp3=temp3[!duplicated(temp3$lpnr_mor),]
-mydata$diabetespreg1 = mydata$lpnr_mor %in% temp3$lpnr_mor
-rm(temp1,temp2,temp3)
-
-temp1=subset(grav2, DIABETES=="1"|DIABETES=="2")
-temp2=grav2 %>% filter_all(any_vars(. %in% c('E107','O240','O241','O243','O244','O249','O240B','O240C','O240D','O240E','O240F','O240X','O244A','O244B','O244X','25000','25009','76110','250A','250B','250C','250D','250E','250F','250X','648A')))
-temp3=rbind(temp1,temp2)
-temp3=temp3[!duplicated(temp3$lpnr_mor),]
-mydata$diabetespreg2 = mydata$lpnr_mor %in% temp3$lpnr_mor
-rm(temp1,temp2,temp3)
-
-temp1=subset(grav1, HYPERTON=="1"|HYPERTON=="2")
-temp2=grav1 %>% filter_all(any_vars(. %in% c('I10','I109','401','401X','40199')))
-temp3=rbind(temp1,temp2)
-temp3=temp3[!duplicated(temp3$lpnr_mor),]
-mydata$HTNpreg1 = mydata$lpnr_mor %in% temp3$lpnr_mor
-rm(temp1,temp2,temp3)
-
-temp1=subset(grav2, HYPERTON=="1"|HYPERTON=="2")
-temp2=grav2 %>% filter_all(any_vars(. %in% c('I10','I109','401','401X','40199')))
-temp3=rbind(temp1,temp2)
-temp3=temp3[!duplicated(temp3$lpnr_mor),]
-mydata$HTNpreg2 = mydata$lpnr_mor %in% temp3$lpnr_mor
-rm(temp1,temp2,temp3)
-
-
-temp=grav1 %>% filter_all(any_vars(. %in% c('O139','642','642A','642B','642C','642D','642X','63701')))
-mydata$GHTNpreg1 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=grav2 %>% filter_all(any_vars(. %in% c('O139','642','642A','642B','642C','642D','642X','63701')))
-mydata$GHTNpreg2 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=grav1 %>% filter_all(any_vars(. %in% c('O14','O140','O141','O142','O149','O141A','O141B','O141X','642E','642F','642G','642H','63703','63704','63709','63710','63799','76210','76220','76230')))
-mydata$PEpreg1 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=grav2 %>% filter_all(any_vars(. %in% c('O14','O140','O141','O142','O149','O141A','O141B','O141X','642E','642F','642G','642H','63703','63704','63709','63710','63799','76210','76220','76230')))
-mydata$PEpreg2 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-
-mydata$allHTNpreg1 = mydata$HTNpreg1 | mydata$GHTNpreg1 | mydata$PEpreg1
-
-mydata$allHTNpreg2 = mydata$HTNpreg2 | mydata$GHTNpreg2 | mydata$PEpreg2
-
-
-#boy child, fetal malformation
-
-temp=subset(grav1, KON=="1")
-mydata$boychildpreg1 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav2, KON=="1")
-mydata$boychildpreg2 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav1, MISSB=="1")
-mydata$malformpreg1 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav2, MISSB=="1")
-mydata$malformpreg2 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-
-
-#SGA and LGA according to Marsal
-
-marsalpreg1 = function(GRDBSpreg1,BVIKTpreg1,boychildpreg1){
-    if(boychildpreg1){
-        mw=-1.907345e-6*GRDBSpreg1^4 + 1.140644e-3*GRDBSpreg1^3 - 1.336265e-1*GRDBSpreg1^2 + 1.976961*GRDBSpreg1 + 2.410053e+2
-    } else {
-        mw=-2.761948e-6*GRDBSpreg1^4 + 1.744841e-3*GRDBSpreg1^3 - 2.893626e-1*GRDBSpreg1^2 + 18.91197*GRDBSpreg1 - 4.135122e+2
-    }
-    pnorm(BVIKTpreg1, mw, abs(0.12*mw))*100
-}
-
-mydata$PCTmarsalpreg1 = sapply(1:nrow(mydata), function(x) marsalpreg1(mydata$GRDBSpreg1[x],mydata$BVIKTpreg1[x],mydata$boychildpreg1[x]))
-
-mydata$SGApreg1marsal= mydata$PCTmarsalpreg1 < pnorm(-2) *100
-mydata$LGApreg1marsal= mydata$PCTmarsalpreg1 > pnorm(2) *100
-
-
-mydata$PCTmarsalpreg2 = sapply(1:nrow(mydata), function(x) marsalpreg1(mydata$GRDBSpreg2[x],mydata$BVIKTpreg2[x],mydata$boychildpreg2[x]))
-
-mydata$SGApreg2marsal= mydata$PCTmarsalpreg2 < pnorm(-2) *100
-mydata$LGApreg2marsal= mydata$PCTmarsalpreg2 > pnorm(2) *100
-
-rm(marsalpreg1,marsalpreg2)
+# JJ: apparently unused
+# #BMI increase and BMI decrease
+# 
+# temp1=subset(mydata, BMIpreg1.1|BMIpreg1.2|BMIpreg1.3|BMIpreg1.4|BMIpreg1.5|BMIpreg1.6)
+# temp2=subset(mydata, BMIpreg2.1|BMIpreg2.2|BMIpreg2.3|BMIpreg2.4|BMIpreg2.5|BMIpreg2.6)
+# 
+# temp1=semi_join(temp1,temp2,by="lpnr_mor")
+# temp2=semi_join(temp2,temp1,by="lpnr_mor")
+# 
+# # TODO check about these 99 placeholders here!!
+# temp3=data.frame(lpnr_mor=temp1$lpnr_mor,
+#                                   BMIscorepreg1=ifelse(temp1$BMIpreg1.1,1,
+# 						ifelse(temp1$BMIpreg1.2,2,
+# 						ifelse(temp1$BMIpreg1.3,3,
+# 						ifelse(temp1$BMIpreg1.4,4,
+# 						ifelse(temp1$BMIpreg1.5,5,
+# 						ifelse(temp1$BMIpreg1.6,6,99)))))),
+#                                   BMIscorepreg2=ifelse(temp2$BMIpreg2.1,1,
+# 						ifelse(temp2$BMIpreg2.2,2,
+# 						ifelse(temp2$BMIpreg2.3,3,
+# 						ifelse(temp2$BMIpreg2.4,4,
+# 						ifelse(temp2$BMIpreg2.5,5,
+# 						ifelse(temp2$BMIpreg2.6,6,99))))))
+# )
+# 
+# temp3=temp3 %>% add_column(BMIdiff=temp3$BMIscorepreg2-temp3$BMIscorepreg1)
+# temp3=temp3 %>% add_column(BMIinc=temp3$BMIdiff>0, BMIdec=temp3$BMIdiff<0)
+# 
+# temp4=subset(temp3, BMIinc)
+# temp5=subset(temp3, BMIdec)
+# 
+# mydata$BMIinc = mydata$lpnr_mor %in% temp4$lpnr_mor
+# mydata$BMIdec = mydata$lpnr_mor %in% temp5$lpnr_mor
+# rm(temp1,temp2,temp3,temp4,temp5)
 
 
 #GA according to ultrasound
@@ -870,17 +809,9 @@ rm(temp1,temp2,mydata3)
 
 #Model 2
 
+df2surv = mydata[,c("GRDBSpreg2", "spontpreg2", "CSpreg1")]
 
-df2temp1=subset(mydata, spontpreg2)
-df2surv1=data.frame(GRDBSpreg2=df2temp1$GRDBSpreg2, delivery=TRUE, CSpreg1=df2temp1$CSpreg1)
-
-df2temp2=subset(mydata, !spontpreg2)
-df2surv2=data.frame(GRDBSpreg2=df2temp2$GRDBSpreg2, delivery=FALSE, CSpreg1=df2temp2$CSpreg1)
-
-df2surv=rbind(df2surv1,df2surv2)
-
-
-survobject=Surv(time=df2surv$GRDBSpreg2, event=df2surv$delivery)
+survobject=Surv(time=df2surv$GRDBSpreg2, event=df2surv$spontpreg2)
 fit=survfit(survobject~CSpreg1, data=df2surv)
 
 ggsurvplot(fit, data=df2surv)
@@ -897,23 +828,11 @@ mysurvplot
 rm(df2temp1,df2temp2,df2surv1,df2surv2,df2surv,survobject,fit,mysurvplot,ggsurvplot)
 
 
-
-
 #Cox model 2
 
-df2temp1=subset(mydata, spontpreg2)
-df2surv1=data.frame(GRDBSpreg2=df2temp1$GRDBSpreg2, delivery=TRUE, CSpreg1=df2temp1$CSpreg1, MALDERpreg2=df2temp1$MALDERpreg2, BMIpreg2=df2temp1$BMIpreg2, notborninswepreg2=df2temp1$notborninswepreg2, smokepreg2=df2temp1$smokepreg2, diabetespreg2=df2temp1$diabetespreg2, allHTNpreg2=df2temp1$allHTNpreg2, boychildpreg2=df2temp1$boychildpreg2, malformpreg2=df2temp1$malformpreg2, SGApreg2marsal=df2temp1$SGApreg2marsal, LGApreg2marsal=df2temp1$LGApreg2marsal)
-
-df2temp2=subset(mydata, !spontpreg2)
-df2surv2=data.frame(GRDBSpreg2=df2temp2$GRDBSpreg2, delivery=FALSE, CSpreg1=df2temp2$CSpreg1, MALDERpreg2=df2temp2$MALDERpreg2, BMIpreg2=df2temp2$BMIpreg2, notborninswepreg2=df2temp2$notborninswepreg2, smokepreg2=df2temp2$smokepreg2, diabetespreg2=df2temp2$diabetespreg2, allHTNpreg2=df2temp2$allHTNpreg2, boychildpreg2=df2temp2$boychildpreg2, malformpreg2=df2temp2$malformpreg2, SGApreg2marsal=df2temp2$SGApreg2marsal, LGApreg2marsal=df2temp2$LGApreg2marsal)
-
-df2surv=rbind(df2surv1,df2surv2)
-
-cox = coxph(Surv(GRDBSpreg2, delivery) ~ CSpreg1 + MALDERpreg2 + BMIpreg2 + notborninswepreg2 + smokepreg2 + diabetespreg2 + allHTNpreg2 + boychildpreg2 + malformpreg2 + SGApreg2marsal + LGApreg2marsal, data = df2surv)
+cox = coxph(Surv(GRDBSpreg2, spontpreg2) ~ CSpreg1 + MALDERpreg2 + BMIpreg2 + notborninswepreg2 + smokepreg2 + diabetespreg2 + allHTNpreg2 + boychildpreg2 + malformpreg2 + SGApreg2marsal + LGApreg2marsal, data = mydata)
 
 summary(cox)
-
-
 
 
 rm(fit,df2temp1,df2temp2,df2surv1,df2surv2,df2surv,survobject,cox,mysurvplot)
@@ -922,7 +841,7 @@ rm(grav1,grav2,mydata,mydata3)
 
 
 
-
+# --------------------------------------------
 
 #df3
 
@@ -938,35 +857,29 @@ temp=subset(grav3, OFRIABEF=="1"|OFRISTIM=="1"|OFRIKIRU=="1"|OFRIICSI=="1"|OFRIA
 grav3=subset(grav3, !lpnr_mor %in% temp$lpnr_mor)
 rm(temp)
 
-grav1=subset(grav1, lpnr_mor!="NA")			
-grav2=subset(grav2, lpnr_mor!="NA")
-grav3=subset(grav3, lpnr_mor!="NA")
+grav1=subset(grav1, !is.na(lpnr_mor) & lpnr_mor!="NA")
+grav2=subset(grav2, !is.na(lpnr_mor) & lpnr_mor!="NA")
+grav3=subset(grav2, !is.na(lpnr_mor) & lpnr_mor!="NA")
 
 grav1=grav1[!duplicated(grav1$lpnr_mor),]
 grav2=grav2[!duplicated(grav2$lpnr_mor),]
 grav3=grav3[!duplicated(grav3$lpnr_mor),]
 
-grav1=semi_join(grav1,grav2,by="lpnr_mor")
-grav1=semi_join(grav1,grav3,by="lpnr_mor")
-grav2=semi_join(grav2,grav1,by="lpnr_mor")
-grav2=semi_join(grav2,grav3,by="lpnr_mor")
-grav3=semi_join(grav3,grav1,by="lpnr_mor")
-grav3=semi_join(grav3,grav2,by="lpnr_mor")
+# --------------
+# JJ: a bit hacky, but works - ideally should use spread/to_wider
+mydata = inner_join(grav1[,c("lpnr_mor", "GRDBS", "AR", "MALDER", "BFODDAT", "BVIKT", "spont", "notborninswe", "unemployed", "smoke", "boychild", "malform", "allHTN", "SGAmarsal", "LGAmarsal")],
+		    grav2[,c("lpnr_mor", "GRDBS", "AR", "MALDER", "BFODDAT", "BVIKT", "spont", "notborninswe", "unemployed", "smoke", "boychild", "malform", "allHTN", "SGAmarsal", "LGAmarsal")],
+		    by="lpnr_mor", suffix=c("preg1", "preg2"))
+grav3 = grav3[,c("lpnr_mor", "GRDBS", "AR", "MALDER", "BFODDAT", "BVIKT", "spont", "notborninswe", "unemployed", "smoke", "boychild", "malform", "allHTN", "SGAmarsal", "LGAmarsal")]
+colnames(grav3)[2:ncol(grav3)] = paste0(colnames(grav3)[2:ncol(grav3)], "preg3")
+mydata = inner_join(mydata, grav3, by="lpnr_mor")
 
-grav1=grav1[order(grav1$lpnr_mor),]
-grav2=grav2[order(grav2$lpnr_mor),]
-grav3=grav3[order(grav3$lpnr_mor),]
 
-mydata=data.frame(lpnr_mor=grav1$lpnr_mor)
+# -------------
 
-mydata=mydata %>% add_column(GRDBSpreg1=grav1$GRDBS, GRDBSpreg2=grav2$GRDBS, GRDBSpreg3=grav3$GRDBS)
-
-temp1=subset(grav1,SECMARK=="1")
-temp2=subset(grav2,TSECTIO=="1")
-temp3=rbind(temp1,temp2)
-temp4=temp3[!duplicated(temp3$lpnr_mor),]
-mydata$CSpreg1 = mydata$lpnr_mor %in% temp4$lpnr_mor
-rm(temp1,temp2,temp3,temp4)
+temp=subset(grav1,SECMARK=="1" | TSECTIO=="1")
+mydata$CSpreg1 = mydata$lpnr_mor %in% temp$lpnr_mor
+rm(temp)
 
 temp=subset(grav2, SECMARK=="1")
 mydata$CSpreg2 = mydata$lpnr_mor %in% temp$lpnr_mor
@@ -974,18 +887,6 @@ rm(temp)
 
 temp=subset(grav3, SECMARK=="1")
 mydata$CSpreg3 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav1, FLSPONT=="1")
-mydata$spontpreg1= mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav2, FLSPONT=="1")
-mydata$spontpreg2= mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav3, FLSPONT=="1")
-mydata$spontpreg3= mydata$lpnr_mor %in% temp$lpnr_mor
 rm(temp)
 
 
@@ -1001,71 +902,41 @@ mydata$w41 = mydata$GRDBSpreg3>=287 & mydata$GRDBSpreg3<294
 mydata$w42 = mydata$GRDBSpreg3>=294
 
 
-
-
+# TODO unused, can remove?
 #categorization based on number of previous CSs
-
-temp0=subset(mydata, !CSpreg1 & !CSpreg2)
-temp2=subset(mydata, CSpreg1 & CSpreg2)
-
-temp1.1=subset(mydata, CSpreg1 & !CSpreg2)
-temp1.2=subset(mydata, !CSpreg1 & CSpreg2)
-temp1.3=rbind(temp1.1,temp1.2)
-
-mydata$zeroCS = mydata$lpnr_mor %in% temp0$lpnr_mor
-mydata$twoCS = mydata$lpnr_mor %in% temp2$lpnr_mor
-mydata$oneCS = mydata$lpnr_mor %in% temp1.3$lpnr_mor
-
-rm(temp0,temp2,temp1.1,temp1.2,temp1.3)
-
+# 
+# temp0=subset(mydata, !CSpreg1 & !CSpreg2)
+# temp2=subset(mydata, CSpreg1 & CSpreg2)
+# 
+# temp1.1=subset(mydata, CSpreg1 & !CSpreg2)
+# temp1.2=subset(mydata, !CSpreg1 & CSpreg2)
+# temp1.3=rbind(temp1.1,temp1.2)
+# 
+# mydata$zeroCS = mydata$lpnr_mor %in% temp0$lpnr_mor
+# mydata$twoCS = mydata$lpnr_mor %in% temp2$lpnr_mor
+# mydata$oneCS = mydata$lpnr_mor %in% temp1.3$lpnr_mor
+# 
+# rm(temp0,temp2,temp1.1,temp1.2,temp1.3)
 
 
 #categorization based on sequence of previous delivery modes
 
-vagvag=subset(mydata, !CSpreg1 & !CSpreg2)
-vagCS=subset(mydata, !CSpreg1 & CSpreg2)
-CSvag=subset(mydata, CSpreg1 & !CSpreg2)
-CSCS=subset(mydata, CSpreg1 & CSpreg2)
+mydata$vagvag= with(mydata, !CSpreg1 & !CSpreg2)
+mydata$vagCS= with(mydata, !CSpreg1 & CSpreg2)
+mydata$CSvag= with(mydata, CSpreg1 & !CSpreg2)
+mydata$CSCS= with(mydata, CSpreg1 & CSpreg2)
 
-mydata$vagvag = mydata$lpnr_mor %in% vagvag$lpnr_mor
-mydata$vagCS = mydata$lpnr_mor %in% vagCS$lpnr_mor
-mydata$CSvag = mydata$lpnr_mor %in% CSvag$lpnr_mor
-mydata$CSCS = mydata$lpnr_mor %in% CSCS$lpnr_mor
-
-rm(vagvag,vagCS,CSvag,CSCS)
+mydata$seq = ifelse(mydata$vagvag,1,ifelse(mydata$vagCS,2,ifelse(mydata$CSvag,3,4)))
 
 
-
-#below is for adjusting for confounders
-
-#year of birth, maternal age, dates of birth, birth weight
-
-mydata=mydata %>% add_column(ARpreg1=grav1$AR, ARpreg2=grav2$AR, ARpreg3=grav3$AR, MALDERpreg1=grav1$MALDER, MALDERpreg2=grav2$MALDER, MALDERpreg3=grav3$MALDER, BFODDATpreg1=grav1$BFODDAT, BFODDATpreg2=grav2$BFODDAT, BFODDATpreg3=grav3$BFODDAT, BVIKTpreg1=grav1$BVIKT, BVIKTpreg2=grav2$BVIKT, BVIKTpreg3=grav3$BVIKT)
-
-
+#------------
+# covariate prep
 
 #BMI
 
-mydata=mydata %>% add_column(BMIpreg1=(grav1$MVIKT/((grav1$MLANGD/100)^2)), BMIpreg2=(grav2$MVIKT/((grav2$MLANGD/100)^2)), BMIpreg3=(grav3$MVIKT/((grav3$MLANGD/100)^2)))
-
-mydata$BMIpreg1.2 = ifelse(is.na(mydata$BMIpreg1), grav1$MVIKT/((grav2$MLANGD/100)^2), mydata$BMIpreg1)
-mydata$BMIpreg2.2 = ifelse(is.na(mydata$BMIpreg2), grav2$MVIKT/((grav1$MLANGD/100)^2), mydata$BMIpreg2)
-mydata$BMIpreg3.2 = ifelse(is.na(mydata$BMIpreg3), grav3$MVIKT/((grav2$MLANGD/100)^2), mydata$BMIpreg3)
-mydata=subset(mydata, select=-c(BMIpreg1,BMIpreg2,BMIpreg3))
-mydata=mydata %>% rename(BMIpreg1=BMIpreg1.2)
-mydata=mydata %>% rename(BMIpreg2=BMIpreg2.2)
-mydata=mydata %>% rename(BMIpreg3=BMIpreg3.2)
-mydata$BMIpreg1=formatC(mydata$BMIpreg1, digits=1, format="f")
-mydata$BMIpreg2=formatC(mydata$BMIpreg2, digits=1, format="f")
-mydata$BMIpreg3=formatC(mydata$BMIpreg3, digits=1, format="f")
-
-mydata$BMIpreg1[mydata$BMIpreg1=="NA"]=23.41
-mydata$BMIpreg2[mydata$BMIpreg2=="NA"]=24.10
-mydata$BMIpreg3[mydata$BMIpreg3=="NA"]=24.98
-mydata$BMIpreg1=as.numeric(mydata$BMIpreg1)
-mydata$BMIpreg2=as.numeric(mydata$BMIpreg2)
-mydata$BMIpreg3=as.numeric(mydata$BMIpreg3)
-
+mydata$BMIpreg1[which(is.na(mydata$BMIpreg1))] = mean(mydata$BMIpreg1, na.rm=T) # should be 23.5
+mydata$BMIpreg2[which(is.na(mydata$BMIpreg2))] = mean(mydata$BMIpreg2, na.rm=T) # should be 24.2
+mydata$BMIpreg3[which(is.na(mydata$BMIpreg3))] = mean(mydata$BMIpreg3, na.rm=T) # should be 25
 
 
 #BMI groups
@@ -1091,196 +962,11 @@ mydata$BMIpreg3.4 = mydata$BMIpreg3>=30.0 & mydata$BMIpreg3<35.0
 mydata$BMIpreg3.5 = mydata$BMIpreg3>=35.0 & mydata$BMIpreg3<40.0
 mydata$BMIpreg3.6 = mydata$BMIpreg3>=40.0 & mydata$BMIpreg3<99
 
-
-#not born in sweden, unemployed, smoking
-
-temp=subset(grav1, MFODLAND!="SVERIGE")
-mydata$notborninswepreg1 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav2, MFODLAND!="SVERIGE")
-mydata$notborninswepreg2 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav3, MFODLAND!="SVERIGE")
-mydata$notborninswepreg3 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav1, ARBETE=="3")
-mydata$unemployedpreg1 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav2, ARBETE=="3")
-mydata$unemployedpreg2 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav3, ARBETE=="3")
-mydata$unemployedpreg3 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav1, ROK1!="1")
-mydata$smokepreg1 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav2, ROK1!="1")
-mydata$smokepreg2 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav3, ROK1!="1")
-mydata$smokepreg3 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-
-#diabetes, hypertension, gestational hypertension, preeclampsia
-
-temp1=subset(grav1, DIABETES=="1"|DIABETES=="2")
-temp2=grav1 %>% filter_all(any_vars(. %in% c('E107','O240','O241','O243','O244','O249','O240B','O240C','O240D','O240E','O240F','O240X','O244A','O244B','O244X','25000','25009','76110','250A','250B','250C','250D','250E','250F','250X','648A')))
-temp3=rbind(temp1,temp2)
-temp3=temp3[!duplicated(temp3$lpnr_mor),]
-mydata$diabetespreg1 = mydata$lpnr_mor %in% temp3$lpnr_mor
-rm(temp1,temp2,temp3)
-
-temp1=subset(grav2, DIABETES=="1"|DIABETES=="2")
-temp2=grav2 %>% filter_all(any_vars(. %in% c('E107','O240','O241','O243','O244','O249','O240B','O240C','O240D','O240E','O240F','O240X','O244A','O244B','O244X','25000','25009','76110','250A','250B','250C','250D','250E','250F','250X','648A')))
-temp3=rbind(temp1,temp2)
-temp3=temp3[!duplicated(temp3$lpnr_mor),]
-mydata$diabetespreg2 = mydata$lpnr_mor %in% temp3$lpnr_mor
-rm(temp1,temp2,temp3)
-
-temp1=subset(grav3, DIABETES=="1"|DIABETES=="2")
-temp2=grav3 %>% filter_all(any_vars(. %in% c('E107','O240','O241','O243','O244','O249','O240B','O240C','O240D','O240E','O240F','O240X','O244A','O244B','O244X','25000','25009','76110','250A','250B','250C','250D','250E','250F','250X','648A')))
-temp3=rbind(temp1,temp2)
-temp3=temp3[!duplicated(temp3$lpnr_mor),]
-mydata$diabetespreg3 = mydata$lpnr_mor %in% temp3$lpnr_mor
-rm(temp1,temp2,temp3)
-
-
-temp1=subset(grav1, HYPERTON=="1"|HYPERTON=="2")
-temp2=grav1 %>% filter_all(any_vars(. %in% c('I10','I109','401','401X','40199')))
-temp3=rbind(temp1,temp2)
-temp3=temp3[!duplicated(temp3$lpnr_mor),]
-mydata$HTNpreg1 = mydata$lpnr_mor %in% temp3$lpnr_mor
-rm(temp1,temp2,temp3)
-
-temp1=subset(grav2, HYPERTON=="1"|HYPERTON=="2")
-temp2=grav2 %>% filter_all(any_vars(. %in% c('I10','I109','401','401X','40199')))
-temp3=rbind(temp1,temp2)
-temp3=temp3[!duplicated(temp3$lpnr_mor),]
-mydata$HTNpreg2 = mydata$lpnr_mor %in% temp3$lpnr_mor
-rm(temp1,temp2,temp3)
-
-temp1=subset(grav3, HYPERTON=="1"|HYPERTON=="2")
-temp2=grav3 %>% filter_all(any_vars(. %in% c('I10','I109','401','401X','40199')))
-temp3=rbind(temp1,temp2)
-temp3=temp3[!duplicated(temp3$lpnr_mor),]
-mydata$HTNpreg3 = mydata$lpnr_mor %in% temp3$lpnr_mor
-rm(temp1,temp2,temp3)
-
-
-
-temp=grav1 %>% filter_all(any_vars(. %in% c('O139','642','642A','642B','642C','642D','642X','63701')))
-mydata$GHTNpreg1 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=grav2 %>% filter_all(any_vars(. %in% c('O139','642','642A','642B','642C','642D','642X','63701')))
-mydata$GHTNpreg2 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=grav3 %>% filter_all(any_vars(. %in% c('O139','642','642A','642B','642C','642D','642X','63701')))
-mydata$GHTNpreg3 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-
-temp=grav1 %>% filter_all(any_vars(. %in% c('O14','O140','O141','O142','O149','O141A','O141B','O141X','642E','642F','642G','642H','63703','63704','63709','63710','63799','76210','76220','76230')))
-mydata$PEpreg1 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=grav2 %>% filter_all(any_vars(. %in% c('O14','O140','O141','O142','O149','O141A','O141B','O141X','642E','642F','642G','642H','63703','63704','63709','63710','63799','76210','76220','76230')))
-mydata$PEpreg2 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=grav3 %>% filter_all(any_vars(. %in% c('O14','O140','O141','O142','O149','O141A','O141B','O141X','642E','642F','642G','642H','63703','63704','63709','63710','63799','76210','76220','76230')))
-mydata$PEpreg3 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-
-mydata$allHTNpreg1 = mydata$HTNpreg1 | mydata$GHTNpreg1 | mydata$PEpreg1
-
-mydata$allHTNpreg2 = mydata$HTNpreg2 | mydata$GHTNpreg2 | mydata$PEpreg2
-
-mydata$allHTNpreg3 = mydata$HTNpreg3 | mydata$GHTNpreg3 | mydata$PEpreg3
-
-
-
-#boy child, fetal malformation
-
-temp=subset(grav1, KON=="1")
-mydata$boychildpreg1 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav2, KON=="1")
-mydata$boychildpreg2 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav3, KON=="1")
-mydata$boychildpreg3 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav1, MISSB=="1")
-mydata$malformpreg1 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav2, MISSB=="1")
-mydata$malformpreg2 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-temp=subset(grav3, MISSB=="1")
-mydata$malformpreg3 = mydata$lpnr_mor %in% temp$lpnr_mor
-rm(temp)
-
-
-
-#SGA and LGA according to Marsal
-
-
-marsalpreg1 = function(GRDBSpreg1,BVIKTpreg1,boychildpreg1){
-    if(boychildpreg1){
-        mw=-1.907345e-6*GRDBSpreg1^4 + 1.140644e-3*GRDBSpreg1^3 - 1.336265e-1*GRDBSpreg1^2 + 1.976961*GRDBSpreg1 + 2.410053e+2
-    } else {
-        mw=-2.761948e-6*GRDBSpreg1^4 + 1.744841e-3*GRDBSpreg1^3 - 2.893626e-1*GRDBSpreg1^2 + 18.91197*GRDBSpreg1 - 4.135122e+2
-    }
-    pnorm(BVIKTpreg1, mw, abs(0.12*mw))*100
-}
-
-mydata$PCTmarsalpreg1 = sapply(1:nrow(mydata), function(x) marsalpreg1(mydata$GRDBSpreg1[x],mydata$BVIKTpreg1[x],mydata$boychildpreg1[x]))
-
-mydata$SGApreg1marsal=mydata$PCTmarsalpreg1 < pnorm(-2) *100
-mydata$LGApreg1marsal=mydata$PCTmarsalpreg1 > pnorm(2) *100
-
-
-mydata$PCTmarsalpreg2 = sapply(1:nrow(mydata), function(x) marsalpreg1(mydata$GRDBSpreg2[x],mydata$BVIKTpreg2[x],mydata$boychildpreg2[x]))
-
-mydata$SGApreg2marsal=mydata$PCTmarsalpreg2 < pnorm(-2) *100
-mydata$LGApreg2marsal=mydata$PCTmarsalpreg2 > pnorm(2) *100
-
-mydata$PCTmarsalpreg3 = sapply(1:nrow(mydata), function(x) marsalpreg1(mydata$GRDBSpreg3[x],mydata$BVIKTpreg3[x],mydata$boychildpreg3[x]))
-
-mydata$SGApreg3marsal=mydata$PCTmarsalpreg3 < pnorm(-2) *100
-mydata$LGApreg3marsal=mydata$PCTmarsalpreg3 > pnorm(2) *100
-
-
-rm(marsalpreg1,marsalpreg2,marsalpreg3)
-
-mydata$seq = ifelse(mydata$vagvag,1,ifelse(mydata$vagCS,2,ifelse(mydata$CSvag,3,4)))
-
-
 #GA according to ultrasound
 
 temp=subset(grav3, GRMETOD==1|GRMETOD==5|GRMETOD==6|GRMETOD==7)
 mydata$GAUSpreg3 = mydata$lpnr_mor %in% temp$lpnr_mor
 rm(temp)
-
-
 
 #df3 descriptive
 
@@ -1294,7 +980,6 @@ CSCS=subset(mydata,CSCS)
 
 
 #continuous variables
-
 
 
 #gestational age preg 1
@@ -1618,10 +1303,10 @@ df_c <- data.frame(mean = c(NA,NA,1.15,2.51,2.25),
 
 forestplot(tabletext,
                       txt_gp = fpTxtGp(label = list(gpar(cex=1),
-                                                                                  gpar(cex=1),
-                                                                                  gpar(cex=1),
-                                                                                  gpar(cex=1),
-                                                                                  gpar(cex=1))),
+                                                    gpar(cex=1),
+                                                    gpar(cex=1),
+                                                    gpar(cex=1),
+                                                    gpar(cex=1))),
                       df_c,new_page = TRUE,
                       boxsize = 0.3,
                       is.summary = c(TRUE, rep(FALSE, 5)),
@@ -1631,7 +1316,7 @@ forestplot(tabletext,
                       xticks = c(0.5,1,1.5,2,2.5,3, 3.5),
                       colgap=unit(5, "mm"),
                       col = fpColors(box = "royalblue",
-                                                    line = "darkblue"),
+                                     line = "darkblue"),
                       vertices = TRUE,
                       lineheight='lines')
 
@@ -1652,10 +1337,10 @@ df_c <- data.frame(mean = c(NA,NA,28.50,25.50,11.09),
 
 forestplot(tabletext,
                       txt_gp = fpTxtGp(label = list(gpar(cex=1),
-                                                                                  gpar(cex=1),
-                                                                                  gpar(cex=1),
-                                                                                  gpar(cex=1),
-                                                                                  gpar(cex=1))),
+                                                    gpar(cex=1),
+                                                    gpar(cex=1),
+                                                    gpar(cex=1),
+                                                    gpar(cex=1))),
                       df_c,new_page = TRUE,
                       boxsize = 0.3,
                       is.summary = c(TRUE, rep(FALSE, 5)),
@@ -1666,7 +1351,7 @@ forestplot(tabletext,
                       zero=1,
                       colgap=unit(5, "mm"),
                       col = fpColors(box = "royalblue",
-                                                    line = "darkblue"),
+                                     line = "darkblue"),
                       vertices = TRUE,
                       lineheight='lines')
 
@@ -1875,10 +1560,10 @@ df_c <- data.frame(mean = c(NA,NA,1.12,2.27,2.10),
 
 forestplot(tabletext,
                       txt_gp = fpTxtGp(label = list(gpar(cex=1),
-                                                                                  gpar(cex=1),
-                                                                                  gpar(cex=1),
-                                                                                  gpar(cex=1),
-                                                                                  gpar(cex=1))),
+                                                    gpar(cex=1),
+                                                    gpar(cex=1),
+                                                    gpar(cex=1),
+                                                    gpar(cex=1))),
                       df_c,new_page = TRUE,
                       boxsize = 0.3,
                       is.summary = c(TRUE, rep(FALSE, 5)),
@@ -1907,10 +1592,10 @@ df_c <- data.frame(mean = c(NA,NA,29.03,26.45,12.61),
 
 forestplot(tabletext,
                       txt_gp = fpTxtGp(label = list(gpar(cex=1),
-                                                                                  gpar(cex=1),
-                                                                                  gpar(cex=1),
-                                                                                  gpar(cex=1),
-                                                                                  gpar(cex=1))),
+                                                    gpar(cex=1),
+                                                    gpar(cex=1),
+                                                    gpar(cex=1),
+                                                    gpar(cex=1))),
                       df_c,new_page = TRUE,
                       boxsize = 0.3,
                       is.summary = c(TRUE, rep(FALSE, 5)),
@@ -1925,7 +1610,6 @@ forestplot(tabletext,
                       lineheight='lines')
 
 rm(tabletext,df_c)
-
 
 
 
@@ -1956,7 +1640,7 @@ g + geom_density(aes(fill=factor(seq)), alpha=0.4, size=0.2) +
 rm(g)
 
 
-
+# ---------------------------------------------------
 
 #survival analyses
 
@@ -1964,16 +1648,10 @@ rm(g)
 #Model 2
 
 
-df3temp1=subset(mydata, spontpreg3)
-df3surv1=data.frame(GRDBSpreg3=df3temp1$GRDBSpreg3, delivery=TRUE, seq=df3temp1$seq)
-
-df3temp2=subset(mydata, !spontpreg3)
-df3surv2=data.frame(GRDBSpreg3=df3temp2$GRDBSpreg3, delivery=FALSE, seq=df3temp2$seq)
-
-df3surv=rbind(df3surv1,df3surv2)
+df3surv = mydata[,c("GRDBSpreg3", "spontpreg3", "seq")]
 
 
-survobject=Surv(time=df3surv$GRDBSpreg3, event=df3surv$delivery)
+survobject=Surv(time=df3surv$GRDBSpreg3, event=df3surv$spontpreg3)
 fit=survfit(survobject~seq, data=df3surv)
 
 ggsurvplot(fit, data=df3surv)
@@ -1989,105 +1667,48 @@ mysurvplot
 
 
 #Cox model 2 on variable seq
-
-df3temp1=subset(mydata, spontpreg3)
-df3surv1=data.frame(GRDBSpreg3=df3temp1$GRDBSpreg3, delivery=TRUE, seq=df3temp1$seq, MALDERpreg3=df3temp1$MALDERpreg3, BMIpreg3=df3temp1$BMIpreg3, notborninswepreg3=df3temp1$notborninswepreg3, smokepreg3=df3temp1$smokepreg3, diabetespreg3=df3temp1$diabetespreg3, allHTNpreg3=df3temp1$allHTNpreg3, boychildpreg3=df3temp1$boychildpreg3, malformpreg3=df3temp1$malformpreg3, SGApreg3marsal=df3temp1$SGApreg3marsal, LGApreg3marsal=df3temp1$LGApreg3marsal)
-
-df3temp2=subset(mydata, !spontpreg3)
-df3surv2=data.frame(GRDBSpreg3=df3temp2$GRDBSpreg3, delivery=FALSE, seq=df3temp2$seq, MALDERpreg3=df3temp2$MALDERpreg3, BMIpreg3=df3temp2$BMIpreg3, notborninswepreg3=df3temp2$notborninswepreg3, smokepreg3=df3temp2$smokepreg3, diabetespreg3=df3temp2$diabetespreg3, allHTNpreg3=df3temp2$allHTNpreg3, boychildpreg3=df3temp2$boychildpreg3, malformpreg3=df3temp2$malformpreg3, SGApreg3marsal=df3temp2$SGApreg3marsal, LGApreg3marsal=df3temp2$LGApreg3marsal)
-
-df3surv=rbind(df3surv1,df3surv2)
-
-cox = coxph(Surv(GRDBSpreg3, delivery) ~ seq + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGApreg3marsal + LGApreg3marsal, data = df3surv)
+cox = coxph(Surv(GRDBSpreg3, spontpreg3) ~ seq + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGApreg3marsal + LGApreg3marsal, data = mydata)
 
 summary(cox)
-
 
 
 #Cox model 2 on variable vagvag
 
-df3temp1=subset(mydata, spontpreg3)
-df3surv1=data.frame(GRDBSpreg3=df3temp1$GRDBSpreg3, delivery=TRUE, vagvag=df3temp1$vagvag, MALDERpreg3=df3temp1$MALDERpreg3, BMIpreg3=df3temp1$BMIpreg3, notborninswepreg3=df3temp1$notborninswepreg3, smokepreg3=df3temp1$smokepreg3, diabetespreg3=df3temp1$diabetespreg3, allHTNpreg3=df3temp1$allHTNpreg3, boychildpreg3=df3temp1$boychildpreg3, malformpreg3=df3temp1$malformpreg3, SGApreg3marsal=df3temp1$SGApreg3marsal, LGApreg3marsal=df3temp1$LGApreg3marsal)
-
-df3temp2=subset(mydata, !spontpreg3)
-df3surv2=data.frame(GRDBSpreg3=df3temp2$GRDBSpreg3, delivery=FALSE, vagvag=df3temp2$vagvag, MALDERpreg3=df3temp2$MALDERpreg3, BMIpreg3=df3temp2$BMIpreg3, notborninswepreg3=df3temp2$notborninswepreg3, smokepreg3=df3temp2$smokepreg3, diabetespreg3=df3temp2$diabetespreg3, allHTNpreg3=df3temp2$allHTNpreg3, boychildpreg3=df3temp2$boychildpreg3, malformpreg3=df3temp2$malformpreg3, SGApreg3marsal=df3temp2$SGApreg3marsal, LGApreg3marsal=df3temp2$LGApreg3marsal)
-
-df3surv=rbind(df3surv1,df3surv2)
-
-cox = coxph(Surv(GRDBSpreg3, delivery) ~ vagvag + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGApreg3marsal + LGApreg3marsal, data = df3surv)
+cox = coxph(Surv(GRDBSpreg3, spontpreg3) ~ vagvag + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGApreg3marsal + LGApreg3marsal, data = mydata)
 
 summary(cox)
-
 
 
 #Cox model 2 on variable vagCS
 
-df3temp1=subset(mydata, spontpreg3)
-df3surv1=data.frame(GRDBSpreg3=df3temp1$GRDBSpreg3, delivery=TRUE, vagCS=df3temp1$vagCS, MALDERpreg3=df3temp1$MALDERpreg3, BMIpreg3=df3temp1$BMIpreg3, notborninswepreg3=df3temp1$notborninswepreg3, smokepreg3=df3temp1$smokepreg3, diabetespreg3=df3temp1$diabetespreg3, allHTNpreg3=df3temp1$allHTNpreg3, boychildpreg3=df3temp1$boychildpreg3, malformpreg3=df3temp1$malformpreg3, SGApreg3marsal=df3temp1$SGApreg3marsal, LGApreg3marsal=df3temp1$LGApreg3marsal)
-
-df3temp2=subset(mydata, !spontpreg3)
-df3surv2=data.frame(GRDBSpreg3=df3temp2$GRDBSpreg3, delivery=FALSE, vagCS=df3temp2$vagCS, MALDERpreg3=df3temp2$MALDERpreg3, BMIpreg3=df3temp2$BMIpreg3, notborninswepreg3=df3temp2$notborninswepreg3, smokepreg3=df3temp2$smokepreg3, diabetespreg3=df3temp2$diabetespreg3, allHTNpreg3=df3temp2$allHTNpreg3, boychildpreg3=df3temp2$boychildpreg3, malformpreg3=df3temp2$malformpreg3, SGApreg3marsal=df3temp2$SGApreg3marsal, LGApreg3marsal=df3temp2$LGApreg3marsal)
-
-df3surv=rbind(df3surv1,df3surv2)
-
-cox = coxph(Surv(GRDBSpreg3, delivery) ~ vagCS + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGApreg3marsal + LGApreg3marsal, data = df3surv)
+cox = coxph(Surv(GRDBSpreg3, spontpreg3) ~ vagCS + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGApreg3marsal + LGApreg3marsal, data = mydata)
 
 summary(cox)
-
 
 
 #Cox model 2 on variable CSvag
 
-df3temp1=subset(mydata, spontpreg3)
-df3surv1=data.frame(GRDBSpreg3=df3temp1$GRDBSpreg3, delivery=TRUE, CSvag=df3temp1$CSvag, MALDERpreg3=df3temp1$MALDERpreg3, BMIpreg3=df3temp1$BMIpreg3, notborninswepreg3=df3temp1$notborninswepreg3, smokepreg3=df3temp1$smokepreg3, diabetespreg3=df3temp1$diabetespreg3, allHTNpreg3=df3temp1$allHTNpreg3, boychildpreg3=df3temp1$boychildpreg3, malformpreg3=df3temp1$malformpreg3, SGApreg3marsal=df3temp1$SGApreg3marsal, LGApreg3marsal=df3temp1$LGApreg3marsal)
-
-df3temp2=subset(mydata, !spontpreg3)
-df3surv2=data.frame(GRDBSpreg3=df3temp2$GRDBSpreg3, delivery=FALSE, CSvag=df3temp2$CSvag, MALDERpreg3=df3temp2$MALDERpreg3, BMIpreg3=df3temp2$BMIpreg3, notborninswepreg3=df3temp2$notborninswepreg3, smokepreg3=df3temp2$smokepreg3, diabetespreg3=df3temp2$diabetespreg3, allHTNpreg3=df3temp2$allHTNpreg3, boychildpreg3=df3temp2$boychildpreg3, malformpreg3=df3temp2$malformpreg3, SGApreg3marsal=df3temp2$SGApreg3marsal, LGApreg3marsal=df3temp2$LGApreg3marsal)
-
-df3surv=rbind(df3surv1,df3surv2)
-
-cox = coxph(Surv(GRDBSpreg3, delivery) ~ CSvag + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGApreg3marsal + LGApreg3marsal, data = df3surv)
+cox = coxph(Surv(GRDBSpreg3, spontpreg3) ~ CSvag + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGApreg3marsal + LGApreg3marsal, data = mydata)
 
 summary(cox)
-
 
 
 #Cox model 2 on variable CSCS
 
-df3temp1=subset(mydata, spontpreg3)
-df3surv1=data.frame(GRDBSpreg3=df3temp1$GRDBSpreg3, delivery=TRUE, CSCS=df3temp1$CSCS, MALDERpreg3=df3temp1$MALDERpreg3, BMIpreg3=df3temp1$BMIpreg3, notborninswepreg3=df3temp1$notborninswepreg3, smokepreg3=df3temp1$smokepreg3, diabetespreg3=df3temp1$diabetespreg3, allHTNpreg3=df3temp1$allHTNpreg3, boychildpreg3=df3temp1$boychildpreg3, malformpreg3=df3temp1$malformpreg3, SGApreg3marsal=df3temp1$SGApreg3marsal, LGApreg3marsal=df3temp1$LGApreg3marsal)
-
-df3temp2=subset(mydata, !spontpreg3)
-df3surv2=data.frame(GRDBSpreg3=df3temp2$GRDBSpreg3, delivery=FALSE, CSCS=df3temp2$CSCS, MALDERpreg3=df3temp2$MALDERpreg3, BMIpreg3=df3temp2$BMIpreg3, notborninswepreg3=df3temp2$notborninswepreg3, smokepreg3=df3temp2$smokepreg3, diabetespreg3=df3temp2$diabetespreg3, allHTNpreg3=df3temp2$allHTNpreg3, boychildpreg3=df3temp2$boychildpreg3, malformpreg3=df3temp2$malformpreg3, SGApreg3marsal=df3temp2$SGApreg3marsal, LGApreg3marsal=df3temp2$LGApreg3marsal)
-
-df3surv=rbind(df3surv1,df3surv2)
-
-cox = coxph(Surv(GRDBSpreg3, delivery) ~ CSCS + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGApreg3marsal + LGApreg3marsal, data = df3surv)
+cox = coxph(Surv(GRDBSpreg3, spontpreg3) ~ CSCS + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGApreg3marsal + LGApreg3marsal, data = mydata)
 
 summary(cox)
-
 
 
 #Cox model 2 on variables vagvag, vagCS, CSvag, CSCS
 
-df3temp1=subset(mydata, spontpreg3)
-df3surv1=data.frame(GRDBSpreg3=df3temp1$GRDBSpreg3, delivery=TRUE, vagvag=df3temp1$vagvag, vagCS=df3temp1$vagCS, CSvag=df3temp1$CSvag, CSCS=df3temp1$CSCS, MALDERpreg3=df3temp1$MALDERpreg3, BMIpreg3=df3temp1$BMIpreg3, notborninswepreg3=df3temp1$notborninswepreg3, smokepreg3=df3temp1$smokepreg3, diabetespreg3=df3temp1$diabetespreg3, allHTNpreg3=df3temp1$allHTNpreg3, boychildpreg3=df3temp1$boychildpreg3, malformpreg3=df3temp1$malformpreg3, SGApreg3marsal=df3temp1$SGApreg3marsal, LGApreg3marsal=df3temp1$LGApreg3marsal)
-
-df3temp2=subset(mydata, !spontpreg3)
-df3surv2=data.frame(GRDBSpreg3=df3temp2$GRDBSpreg3, delivery=FALSE, vagvag=df3temp2$vagvag, vagCS=df3temp2$vagCS, CSvag=df3temp2$CSvag, CSCS=df3temp2$CSCS, MALDERpreg3=df3temp2$MALDERpreg3, BMIpreg3=df3temp2$BMIpreg3, notborninswepreg3=df3temp2$notborninswepreg3, smokepreg3=df3temp2$smokepreg3, diabetespreg3=df3temp2$diabetespreg3, allHTNpreg3=df3temp2$allHTNpreg3, boychildpreg3=df3temp2$boychildpreg3, malformpreg3=df3temp2$malformpreg3, SGApreg3marsal=df3temp2$SGApreg3marsal, LGApreg3marsal=df3temp2$LGApreg3marsal)
-
-df3surv=rbind(df3surv1,df3surv2)
-
-cox = coxph(Surv(GRDBSpreg3, delivery) ~ vagvag + vagCS + CSvag + CSCS + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGApreg3marsal + LGApreg3marsal, data = df3surv)
+cox = coxph(Surv(GRDBSpreg3, spontpreg3) ~ vagvag + vagCS + CSvag + CSCS + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGApreg3marsal + LGApreg3marsal, data = mydata)
 
 summary(cox)
-
-
 
 
 rm(df3temp1,df3temp2,df3surv1,df3surv2,df3surv,survobject,fit,mysurvplot,ggsurvplot,cox)
 
 rm(grav1,grav2,grav3,mydata,mydata2,mydata3)
-
 
 
