@@ -30,9 +30,9 @@ mfr2$BFODDAT=ymd(mfr2$BFODDAT)
 mfr2=mfr2 %>% add_column(BMI=as.numeric(mfr2$MVIKT/((mfr2$MLANGD/100)^2)))
 
 mfr2=group_by(mfr2, lpnr_mor) %>%
-  summarize(mh=mean(MLANGD, na.rm=T)) %>%
-  ungroup() %>%
-  right_join(mfr2, by="lpnr_mor")
+    summarize(mh=mean(MLANGD, na.rm=T)) %>%
+    ungroup() %>%
+    right_join(mfr2, by="lpnr_mor")
 
 mfr2$BMI=with(mfr2, ifelse(is.na(BMI), MVIKT/((mh/100)^2), BMI))
 
@@ -67,16 +67,16 @@ mfr2$malform=mfr2$MISSB=="1" & !is.na(mfr2$MISSB)
 #diabetes, hypertension, gestational hypertension, preeclampsia, allHTN
 
 ICD_COL_NAMES=c("MDIAG1","MDIAG2","MDIAG3","MDIAG4","MDIAG5","MDIAG6","MDIAG7","MDIAG8","MDIAG9","MDIAG10","MDIAG11","MDIAG12","GDIAG1","GDIAG2","GDIAG3","GDIAG4")
-  
-  
+    
+    
 DIAB_CODES=c('E107','O240','O241','O243','O244','O249','O240B','O240C','O240D','O240E','O240F','O240X','O244A','O244B','O244X','25000','25009','76110','250A','250B','250C','250D','250E','250F','250X','648A')
 
-mfr2 <- mfr2%>%mutate(diabetes=case_when((if_any(ICD_COL_NAMES, ~ . %in% DIAB_CODES)) ~ TRUE, (DIABETES=="1") ~ TRUE,  (DIABETES=="2") ~ TRUE, TRUE ~ FALSE))
+mfr2 <- mfr2%>%mutate(diabetes=case_when((if_any(ICD_COL_NAMES, ~ . %in% DIAB_CODES)) ~ TRUE, (DIABETES=="1") ~ TRUE,    (DIABETES=="2") ~ TRUE, TRUE ~ FALSE))
 
 
 HTN_CODES=c('I10','I109','401','401X','40199')
 
-mfr2 <- mfr2%>%mutate(HTN=case_when((if_any(ICD_COL_NAMES, ~ . %in% HTN_CODES)) ~ TRUE, (HYPERTON=="1") ~ TRUE,  (HYPERTON=="2") ~ TRUE, TRUE ~ FALSE))
+mfr2 <- mfr2%>%mutate(HTN=case_when((if_any(ICD_COL_NAMES, ~ . %in% HTN_CODES)) ~ TRUE, (HYPERTON=="1") ~ TRUE,    (HYPERTON=="2") ~ TRUE, TRUE ~ FALSE))
 
 
 GHTN_CODES=c('O139','642','642A','642B','642C','642D','642X','63701')
@@ -98,12 +98,12 @@ mfr2$allHTN[which(is.na(mfr2$allHTN))]=F
 
 
 marsal = function(GRDBS,BVIKTBS,boychild){
-  if(boychild){
-    mw=-1.907345e-6*GRDBS^4 + 1.140644e-3*GRDBS^3 - 1.336265e-1*GRDBS^2 + 1.976961*GRDBS + 2.410053e+2
-  } else {
-    mw=-2.761948e-6*GRDBS^4 + 1.744841e-3*GRDBS^3 - 2.893626e-1*GRDBS^2 + 18.91197*GRDBS - 4.135122e+2
-  }
-  pnorm(BVIKTBS, mw, abs(0.12*mw))*100
+    if(boychild){
+        mw=-1.907345e-6*GRDBS^4 + 1.140644e-3*GRDBS^3 - 1.336265e-1*GRDBS^2 + 1.976961*GRDBS + 2.410053e+2
+    } else {
+        mw=-2.761948e-6*GRDBS^4 + 1.744841e-3*GRDBS^3 - 2.893626e-1*GRDBS^2 + 18.91197*GRDBS - 4.135122e+2
+    }
+    pnorm(BVIKTBS, mw, abs(0.12*mw))*100
 }
 
 mfr2$PCTmarsal = sapply(1:nrow(mfr2), function(x) marsal(mfr2$GRDBS[x],mfr2$BVIKTBS[x],mfr2$boychild[x]))
@@ -490,41 +490,47 @@ exp(cbind(OR=coef(glm9),confint(glm9)))
 
 
 
-#forest plot of above results, table 3a
+#forest plot of above results
 
 
 tabletext <- cbind(
-  c("Gestational age","","<37+0 w","","<28+0 w","28+0 - 31+6 w","32+0 - 33+6 w","34+0 - 36+6 w","37+0 - 37+6 w","38+0 - 38+6 w","","41+0 - 41+6 w",">41+6 w"),
-  c("n","","10 912","","408","631","959","8 914","16 348","53 534","","101 617","22 504"),
-  c("% of cohort","","2.13%","","0.080%","0.12%","0.19%","1.74%","3.19%","10.45%","","19.83%","4.39%"),
-  c("aOR (95% CI)","","1.67 (1.57, 1.77)","","1.77 (1.32, 2.33)","1.64 (1.28, 2.06)","2.16 (1.80, 2.57)","1.62 (1.51, 1.72)","1.25 (1.19, 1.32)","1.10 (1.06, 1.14)","","1.24 (1.21, 1.27)","1.55 (1.49, 1.62)"),
-  c("P-value","","<1E-15","","7.4E-5","5.4E-5","<1E-15","<1E-15","<1E-15","2.5E-8","","<1E-15","<1E-15"))
+    c("Gestational age","","<37+0 w","","<28+0 w","28+0 - 31+6 w","32+0 - 33+6 w","34+0 - 36+6 w","37+0 - 37+6 w","38+0 - 38+6 w","","41+0 - 41+6 w",">41+6 w"),
+    c("aOR (95% CI)","","1.67 (1.57 - 1.77)","","1.77 (1.32 - 2.33)","1.64 (1.28 - 2.06)","2.16 (1.80 - 2.57)","1.62 (1.51 - 1.72)","1.25 (1.19 - 1.32)","1.10 (1.06 - 1.14)","","1.24 (1.21 - 1.27)","1.55 (1.49 - 1.62)"),
+    c("P","","<1E-15","","7.4E-5","5.4E-5","<1E-15","<1E-15","<1E-15","2.5E-8","","<1E-15","<1E-15"))
+
+tabletext_lists <- list(list(),list(),list())
+    tabletext_lists[[1]]<-tabletext[,1]
+    tabletext_lists[[2]]<-tabletext[,2]
+    tabletext_lists[[3]]<-tabletext[,3]
+    tabletext_lists[[3]][1]<-list(expression(bolditalic("P")))
 
 df_c <- data.frame(mean = c(NA,NA,1.67,NA,1.77,1.64,2.16,1.62,1.25,1.10,NA,1.24,1.55),
-                   lower = c(NA,NA,1.57,NA,1.32,1.28,1.80,1.51,1.19,1.06,NA,1.21,1.49),
-                   upper = c(NA,NA,1.77,NA,2.33,2.06,2.57,1.72,1.32,1.14,NA,1.27,1.62))
+                                      lower = c(NA,NA,1.57,NA,1.32,1.28,1.80,1.51,1.19,1.06,NA,1.21,1.49),
+                                      upper = c(NA,NA,1.77,NA,2.33,2.06,2.57,1.72,1.32,1.14,NA,1.27,1.62))
 
-forestplot(tabletext,
-           txt_gp = fpTxtGp(label = list(gpar(cex=1),
-                                         gpar(cex=1),
-                                         gpar(cex=1),
-                                         gpar(cex=1))),
-           df_c,new_page = TRUE,
-           boxsize = 0.2,
-           is.summary = c(TRUE, rep(FALSE, 12)),
-           clip = c(0.7,3.0),
-           xlab = "aOR",
-           xlog = FALSE,
-           zero=1,
-           colgap=unit(5, "mm"),
-           col = fpColors(box = "royalblue",
-                          line = "darkblue"),
-           vertices = TRUE,
-           lineheight='lines')
+bmp("Figure2.bmp", units="in", width=8, height=5, res=800)
 
-rm(tabletext,df_c)
+forestplot(tabletext_lists,
+                      txt_gp = fpTxtGp(label = list(gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1))),
+                      df_c,new_page = TRUE,
+                      boxsize = 0.2,
+                      is.summary = c(TRUE, rep(FALSE, 12)),
+                      clip = c(0.7,3.0),
+                      xlab = "aOR",
+                      xlog = FALSE,
+                      zero=1,
+                      colgap=unit(5, "mm"),
+                      col = fpColors(box = "royalblue",
+                                                    line = "darkblue"),
+                      vertices = TRUE,
+                      lineheight='lines')
 
+dev.off()
 
+rm(tabletext,tabletext_lists,df_c)
 
 
 
@@ -593,41 +599,49 @@ exp(cbind(OR=coef(glm9),confint(glm9)))
 
 
 
-#forest plot of above results, table 4a
+#forest plot of above results
 
 
 tabletext <- cbind(
-  c("Gestational age","","<37+0 w","","<28+0 w","28+0 - 31+6 w","32+0 - 33+6 w","34+0 - 36+6 w","37+0 - 37+6 w","38+0 - 38+6 w","","41+0 - 41+6 w",">41+6 w"),
-  c("n","","9 086","","295","490","778","7 523","14 188","47 031","","87 476","17 779"),
-  c("% of cohort","","2.04%","","0.066%","0.11%","0.17%","1.69%","3.19%","10.56%","","19.64%","3.99%"),
-  c("aOR (95% CI)","","1.67 (1.57, 1.78)","","1.57 (1.09, 2.19)","1.77 (1.35, 2.29)","2.24 (1.84, 2.71)","1.61 (1.50, 1.73)","1.26 (1.19, 1.33)","1.10 (1.06, 1.14)","","1.25 (1.22, 1.28)","1.61 (1.53, 1.68)"),
-  c("P-value","","<1E-15","","0.011","2.0E-5","<1E-15","<1E-15","8.7E-15","7.3E-8","","<1E-15","<1E-15"))
+    c("Gestational age","","<37+0 w","","<28+0 w","28+0 - 31+6 w","32+0 - 33+6 w","34+0 - 36+6 w","37+0 - 37+6 w","38+0 - 38+6 w","","41+0 - 41+6 w",">41+6 w"),
+    c("aOR (95% CI)","","1.67 (1.57 - 1.78)","","1.57 (1.09 - 2.19)","1.77 (1.35 - 2.29)","2.24 (1.84 - 2.71)","1.61 (1.50 - 1.73)","1.26 (1.19 - 1.33)","1.10 (1.06 - 1.14)","","1.25 (1.22 - 1.28)","1.61 (1.53 - 1.68)"),
+    c("P","","<1E-15","","0.011","2.0E-5","<1E-15","<1E-15","8.7E-15","7.3E-8","","<1E-15","<1E-15"))
+
+tabletext_lists <- list(list(),list(),list())
+tabletext_lists[[1]]<-tabletext[,1]
+tabletext_lists[[2]]<-tabletext[,2]
+tabletext_lists[[3]]<-tabletext[,3]
+tabletext_lists[[3]][1]<-list(expression(bolditalic("P")))
 
 df_c <- data.frame(mean = c(NA,NA,1.67,NA,1.57,1.77,2.24,1.61,1.26,1.10,NA,1.25,1.61),
-                   lower = c(NA,NA,1.57,NA,1.09,1.35,1.84,1.50,1.19,1.06,NA,1.22,1.53),
-                   upper = c(NA,NA,1.78,NA,2.19,2.29,2.71,1.73,1.33,1.14,NA,1.28,1.68))
+                                      lower = c(NA,NA,1.57,NA,1.09,1.35,1.84,1.50,1.19,1.06,NA,1.22,1.53),
+                                      upper = c(NA,NA,1.78,NA,2.19,2.29,2.71,1.73,1.33,1.14,NA,1.28,1.68))
 
-forestplot(tabletext,
-           txt_gp = fpTxtGp(label = list(gpar(cex=1),
-                                         gpar(cex=1),
-                                         gpar(cex=1),
-                                         gpar(cex=1),
-                                         gpar(cex=1))),
-           df_c,new_page = TRUE,
-           boxsize = 0.2,
-           is.summary = c(TRUE, rep(FALSE, 12)),
-           clip = c(1,3.5),
-           xticks = c(1,1.5,2,2.5,3),
-           xlab = "aOR",
-           xlog = FALSE,
-           zero=1,
-           colgap=unit(5, "mm"),
-           col = fpColors(box = "royalblue",
-                          line = "darkblue"),
-           vertices = TRUE,
-           lineheight='lines')
+bmp("FigureS3.bmp", units="in", width=8, height=5, res=800)
 
-rm(tabletext,df_c)
+forestplot(tabletext_lists,
+                      txt_gp = fpTxtGp(label = list(gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1))),
+                      df_c,new_page = TRUE,
+                      boxsize = 0.2,
+                      is.summary = c(TRUE, rep(FALSE, 12)),
+                      clip = c(1,3.5),
+                      xticks = c(1,1.5,2,2.5,3),
+                      xlab = "aOR",
+                      xlog = FALSE,
+                      zero=1,
+                      colgap=unit(5, "mm"),
+                      col = fpColors(box = "royalblue",
+                                                    line = "darkblue"),
+                      vertices = TRUE,
+                      lineheight='lines')
+
+dev.off()
+
+rm(tabletext,tabletext_lists,df_c)
 
 
 rm(glm1,glm2,glm3,glm4,glm5,glm6,glm7,glm8,glm9,temp1,temp2,temp3,temp4,temp5,temp6,temp7,temp8,temp9,tempPTL,tempPTL1,tempPTL2,tempPTL3,tempPTL4,temp37,temp38,temp41,temp42)
@@ -638,26 +652,31 @@ rm(glm1,glm2,glm3,glm4,glm5,glm6,glm7,glm8,glm9,temp1,temp2,temp3,temp4,temp5,te
 #df2 density plot
 
 
-theme_set(theme_light())
+mydata3=subset(mydata, spontpreg2==TRUE)
 
-mydata3=subset(mydata,spontpreg2==TRUE)
+temp=subset(mydata3, select=c("GRDBSpreg2","CSpreg1"))
 
-g <- ggplot(mydata3, aes(GRDBSpreg2))
 
-g + geom_density(aes(fill=factor(CSpreg1)), alpha=0.4, size=0.2) + 
-  labs(x="Gestational duration of the second pregnancy (days)",
-       y="Proportion",
-       yaxt="n",
-       fill="Mode of delivery the first pregnancy") +
-  scale_fill_discrete(labels=c("Vaginal","Cesarean section")) +
-  geom_vline(xintercept = 259, linetype=3, color="red") +
-  annotate(geom="text", x=235, y=0.05, label="37+0 weeks", color="red") +
-  theme(axis.text.y = element_blank()) +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-  theme(panel.border = element_blank()) +
-  theme(axis.line = element_line(colour = "black"))
+png("Figure1a.png", units="in", width=6.73, height=4.03, res=800)
 
-rm(g)
+ggplot(temp, aes(GRDBSpreg2, fill=CSpreg1)) + geom_density(alpha=0.6, size=0.2) +
+    scale_fill_brewer(palette = "Set1", labels=c("Vaginal","CS")) +
+    labs(x="Gestational duration of the second pregnancy (days)",
+              y="Proportion",
+              yaxt="n",
+              fill="Previous delivery mode") +
+    geom_vline(xintercept = 259, linetype=3, color="red") +
+    annotate(geom="text", x=245, y=0.05, label="37+0 weeks", color="red") +
+    annotate(geom="text", x=160, y=0.05, label="A", color="red", size=7) +
+    theme(legend.position = c(0.2,0.5)) +
+    theme(axis.text.y = element_blank()) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+    theme(panel.border = element_blank()) +
+    theme(axis.line = element_line(colour = "black"))
+
+dev.off()
+
+rm(mydata3,temp)
 
 
 
@@ -671,13 +690,22 @@ fit=survfit(survobject~CSpreg1, data=df2surv)
 
 ggsurvplot(fit, data=df2surv)
 
-mysurvplot=ggsurvplot(fit, size=0.5, xlim=c(154,308), break.x.by=28, ylab="", xlab="Gestational duration of the second pregnancy (days)", pval=TRUE, risk.table=TRUE, risk.table.title="", risk.table.height=0.30, legend.labs=c("Previous vaginal delivery","Previous CS"), legend.title="")
+mysurvplot=ggsurvplot(fit, size=0.5, palette=c("orange","green"), lty=c(1:2), xlim=c(154,308), break.x.by=28, ylab="Probability", xlab="Gestational duration of the second pregnancy (days)", pval=TRUE, risk.table=FALSE, legend.labs=c("Vaginal, -","CS,                aHR 0.72 (95% CI 0.71 - 0.73), P <1E-15"), legend.title="Previous delivery mode")
 
 mysurvplot$plot <- mysurvplot$plot + 
-  geom_segment(aes(x=259,y=0,xend=259,yend=1),linetype="dashed",color="red") + 
-  annotate(geom="text", x=245, y=0.75, label="37+0 weeks", color="red")
+    geom_segment(aes(x=259,y=0,xend=259,yend=1),linetype="dashed",color="red") + 
+    annotate(geom="text", x=245, y=0.85, label="37+0 weeks", color="red") +
+    annotate(geom="text", x=300, y=0.9, label="A", color="red", size=7) +
+    theme(legend.position = c(0.32, 0.5))
 
 mysurvplot
+
+png("Figure4a.png", units="in", width=9, height=4, res=800)
+
+mysurvplot
+
+dev.off()
+
 
 
 cox=coxph(Surv(GRDBSpreg2, spontpreg2) ~ CSpreg1 + MALDERpreg2 + BMIpreg2 + notborninswepreg2 + smokepreg2 + diabetespreg2 + allHTNpreg2 + boychildpreg2 + malformpreg2 + SGAmarsalpreg2 + LGAmarsalpreg2, data=mydata)
@@ -687,7 +715,7 @@ summary(cox)
 rm(df2surv,survobject,fit,ggsurvplot,mysurvplot,cox)
 
 
-rm(grav1,grav2,mydata,mydata3,mydatasec,mydatavag)
+rm(grav1,grav2,mydata,mydata3,mydatasec,mydatavag,temp)
 
 
 
@@ -1012,74 +1040,101 @@ rm(mydata3,tempPTL,glm1)
 
 
 
-#forest plot of above results, table 3b (parts 1 and 2)
+#forest plot of above results
 
 
 tabletext <- cbind(
-  c("Sequence","","CS - vaginal","vaginal - CS","vaginal - CS"),
-  c("","","vs","vs","vs"),
-  c("","","vaginal - vaginal","vaginal - vaginal","CS - vaginal"),
-  c("aOR (95% CI)","","1.15 (0.96, 1.36)","2.50 (2.01, 3.09)","2.25 (1.71, 2.95)"),
-  c("P-value","","0.13","<1E-15","5.4E-9"))
+    c("Sequence","","1st CS - 2nd Vag","1st Vag - 2nd CS","1st Vag - 2nd CS"),
+    c("","","vs","vs","vs"),
+    c("","","1st Vag - 2nd Vag","1st Vag - 2nd Vag","1st CS - 2nd Vag"),
+    c("aOR (95% CI)","","1.15 (0.96 - 1.36)","2.50 (2.01 - 3.09)","2.25 (1.71 - 2.95)"),
+    c("P","","      0.13","        <1E-15","        5.4E-9"))
+
+tabletext_lists <- list(list(),list(),list(),list(),list())
+tabletext_lists[[1]]<-tabletext[,1]
+tabletext_lists[[2]]<-tabletext[,2]
+tabletext_lists[[3]]<-tabletext[,3]
+tabletext_lists[[4]]<-tabletext[,4]
+tabletext_lists[[5]]<-tabletext[,5]
+tabletext_lists[[5]][1]<-list(expression(bolditalic("P")))
 
 df_c <- data.frame(mean = c(NA,NA,1.15,2.50,2.25),
-                   lower = c(NA,NA,0.96,2.01,1.71),
-                   upper = c(NA,NA,1.36,3.09,2.95))
+                                      lower = c(NA,NA,0.96,2.01,1.71),
+                                      upper = c(NA,NA,1.36,3.09,2.95))
 
-forestplot(tabletext,
-           txt_gp = fpTxtGp(label = list(gpar(cex=1),
-                                         gpar(cex=1),
-                                         gpar(cex=1),
-                                         gpar(cex=1),
-                                         gpar(cex=1))),
-           df_c,new_page = TRUE,
-           boxsize = 0.3,
-           is.summary = c(TRUE, rep(FALSE, 5)),
-           clip = c(0.5,3.5),
-           zero=0.5,
-           xlab = "aOR",
-           xticks = c(0.5,1,1.5,2,2.5,3,3.5),
-           colgap=unit(5, "mm"),
-           col = fpColors(box = "royalblue",
-                          line = "darkblue"),
-           vertices = TRUE,
-           lineheight='lines')
+bmp("Figure3.1.bmp", units="in", width=9, height=3, res=800)
 
-rm(tabletext,df_c)
+forestplot(tabletext_lists,
+                      txt_gp = fpTxtGp(label = list(gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1))),
+                      df_c,new_page = TRUE,
+                      grid=structure(c(log(2.72)),
+                                                    gp=gpar(lty=2,col="#CCCCFF")),
+                      boxsize = 0.3,
+                      is.summary = c(TRUE, rep(FALSE, 5)),
+                      clip = c(0.5,3.5),
+                      zero=0.5,
+                      xlab = "aOR",
+                      xticks = c(0.5,1,1.5,2,2.5,3,3.5),
+                      colgap=unit(5, "mm"),
+                      col = fpColors(box = "royalblue",
+                                                    line = "darkblue"),
+                      vertices = TRUE,
+                      lineheight=unit(0.4,'in'))
+
+dev.off()
+
+rm(tabletext,tabletext_lists,df_c)
+
 
 
 tabletext <- cbind(
-  c("Sequence","","CS - CS","CS - CS","CS - CS"),
-  c("","","vs","vs","vs"),
-  c("","","vaginal - vaginal","CS - vaginal","vaginal - CS"),
-  c("aOR (95% CI)","","28.49 (21.72, 37.33)","25.50 (18.46, 35.33)","11.08 (7.85, 15.72)"),
-  c("P-value","","<1E-15","<1E-15","<1E-15"))
+    c("Sequence","","1st CS - 2nd CS","1st CS - 2nd CS","1st CS - 2nd CS"),
+    c("","","vs","vs","vs"),
+    c("","","1st Vag - 2nd Vag","1st CS - 2nd Vag","1st Vag - 2nd CS"),
+    c("aOR (95% CI)","","28.49 (21.72 - 37.33)","25.50 (18.46 - 35.33)","11.08 (7.85 - 15.72)"),
+    c("P","","<1E-15","<1E-15","<1E-15"))
+
+tabletext_lists <- list(list(),list(),list(),list(),list())
+tabletext_lists[[1]]<-tabletext[,1]
+tabletext_lists[[2]]<-tabletext[,2]
+tabletext_lists[[3]]<-tabletext[,3]
+tabletext_lists[[4]]<-tabletext[,4]
+tabletext_lists[[5]]<-tabletext[,5]
+tabletext_lists[[5]][1]<-list(expression(bolditalic("P")))
 
 df_c <- data.frame(mean = c(NA,NA,28.49,25.50,11.08),
-                   lower = c(NA,NA,21.72,18.46,7.85),
-                   upper = c(NA,NA,37.33,35.33,15.72))
+                                      lower = c(NA,NA,21.72,18.46,7.85),
+                                      upper = c(NA,NA,37.33,35.33,15.72))
 
-forestplot(tabletext,
-           txt_gp = fpTxtGp(label = list(gpar(cex=1),
-                                         gpar(cex=1),
-                                         gpar(cex=1),
-                                         gpar(cex=1),
-                                         gpar(cex=1))),
-           df_c,new_page = TRUE,
-           boxsize = 0.3,
-           is.summary = c(TRUE, rep(FALSE, 5)),
-           clip = c(1,40),
-           xlab = "aOR",
-           xlog = FALSE,
-           xticks = c(1,10,20,30,40),
-           zero=1,
-           colgap=unit(5, "mm"),
-           col = fpColors(box = "royalblue",
-                          line = "darkblue"),
-           vertices = TRUE,
-           lineheight='lines')
+bmp("Figure3.2.bmp", units="in", width=9, height=3, res=800)
 
-rm(tabletext,df_c)
+forestplot(tabletext_lists,
+                      txt_gp = fpTxtGp(label = list(gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1))),
+                      df_c,new_page = TRUE,
+                      boxsize = 0.3,
+                      is.summary = c(TRUE, rep(FALSE, 5)),
+                      clip = c(1,40),
+                      xlab = "aOR",
+                      xlog = FALSE,
+                      xticks = c(1,10,20,30,40),
+                      zero=1,
+                      colgap=unit(5, "mm"),
+                      col = fpColors(box = "royalblue",
+                                                    line = "darkblue"),
+                      vertices = TRUE,
+                      lineheight=unit(0.4,'in'))
+
+dev.off()
+
+rm(tabletext,tabletext_lists,df_c)
 
 
 
@@ -1170,77 +1225,260 @@ rm(mydata3,tempPTL,glm1)
 
 
 
-#forest plot of above results, tables 4b (parts 1 and 2)
+#forest plot of above results
 
 
 tabletext <- cbind(
-  c("Sequence","","CS - vaginal","vaginal - CS","vaginal - CS"),
-  c("","","vs","vs","vs"),
-  c("","","vaginal - vaginal","vaginal - vaginal","CS - vaginal"),
-  c("aOR (95% CI)","","1.12 (0.91, 1.35)","2.27 (1.77, 2.87)","2.10 (1.54, 2.84)"),
-  c("P-value","","0.28","3.1E-11","2.1E-6"))
+    c("Sequence","","1st CS - 2nd Vag","1st Vag - 2nd CS","1st Vag - 2nd CS"),
+    c("","","vs","vs","vs"),
+    c("","","1st Vag - 2nd Vag","1st Vag - 2nd Vag","1st CS - 2nd Vag"),
+    c("aOR (95% CI)","","1.12 (0.91 - 1.35)","2.27 (1.77 - 2.87)","2.10 (1.54 - 2.84)"),
+    c("P","","0.28","3.1E-11","2.1E-6"))
+
+tabletext_lists <- list(list(),list(),list(),list(),list())
+tabletext_lists[[1]]<-tabletext[,1]
+tabletext_lists[[2]]<-tabletext[,2]
+tabletext_lists[[3]]<-tabletext[,3]
+tabletext_lists[[4]]<-tabletext[,4]
+tabletext_lists[[5]]<-tabletext[,5]
+tabletext_lists[[5]][1]<-list(expression(bolditalic("P")))
 
 df_c <- data.frame(mean = c(NA,NA,1.12,2.27,2.10),
-                   lower = c(NA,NA,0.91,1.77,1.54),
-                   upper = c(NA,NA,1.35,2.87,2.84))
+                                      lower = c(NA,NA,0.91,1.77,1.54),
+                                      upper = c(NA,NA,1.35,2.87,2.84))
 
-forestplot(tabletext,
-           txt_gp = fpTxtGp(label = list(gpar(cex=1),
-                                         gpar(cex=1),
-                                         gpar(cex=1),
-                                         gpar(cex=1),
-                                         gpar(cex=1))),
-           df_c,new_page = TRUE,
-           boxsize = 0.3,
-           is.summary = c(TRUE, rep(FALSE, 5)),
-           clip = c(0.5,3.0),
-           zero=0.5,
-           xlab = "aOR",
-           colgap=unit(5, "mm"),
-           col = fpColors(box = "royalblue",
-                          line = "darkblue"),
-           vertices = TRUE,
-           lineheight='lines')
+bmp("FigureS4.1.bmp", units="in", width=9, height=3, res=800)
 
-rm(tabletext,df_c)
+forestplot(tabletext_lists,
+                      txt_gp = fpTxtGp(label = list(gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1))),
+                      df_c,new_page = TRUE,
+                      grid=structure(c(log(2.72)),
+                                                    gp=gpar(lty=2,col="#CCCCFF")),
+                      boxsize = 0.3,
+                      is.summary = c(TRUE, rep(FALSE, 5)),
+                      clip = c(0.5,3.0),
+                      zero=0.5,
+                      xlab = "aOR",
+                      colgap=unit(5, "mm"),
+                      col = fpColors(box = "royalblue",
+                                                    line = "darkblue"),
+                      vertices = TRUE,
+                      lineheight=unit(0.4,'in'))
+
+dev.off()
+
+rm(tabletext,tabletext_lists,df_c)
+
 
 
 tabletext <- cbind(
-  c("Sequence","","CS - CS","CS - CS","CS - CS"),
-  c("","","vs","vs","vs"),
-  c("","","vaginal - vaginal","CS - vaginal","vaginal - CS"),
-  c("aOR (95% CI)","","29.06 (21.64, 38.94)","26.46 (18.60, 37.75)","12.62 (8.61, 18.60)"),
-  c("P-value","","<1E-15","<1E-15","<1E-15"))
+    c("Sequence","","1st CS - 2nd CS","1st CS - 2nd CS","1st CS - 2nd CS"),
+    c("","","vs","vs","vs"),
+    c("","","1st Vag - 2nd Vag","1st CS - 2nd Vag","1st Vag - 2nd CS"),
+    c("aOR (95% CI)","","29.06 (21.64 - 38.94)","26.46 (18.60 - 37.75)","12.62 (8.61 - 18.60)"),
+    c("P","","<1E-15","<1E-15","<1E-15"))
+
+tabletext_lists <- list(list(),list(),list(),list(),list())
+tabletext_lists[[1]]<-tabletext[,1]
+tabletext_lists[[2]]<-tabletext[,2]
+tabletext_lists[[3]]<-tabletext[,3]
+tabletext_lists[[4]]<-tabletext[,4]
+tabletext_lists[[5]]<-tabletext[,5]
+tabletext_lists[[5]][1]<-list(expression(bolditalic("P")))
 
 df_c <- data.frame(mean = c(NA,NA,29.06,26.46,12.62),
-                   lower = c(NA,NA,21.64,18.60,8.61),
-                   upper = c(NA,NA,38.94,37.75,18.60))
+                                      lower = c(NA,NA,21.64,18.60,8.61),
+                                      upper = c(NA,NA,38.94,37.75,18.60))
 
-forestplot(tabletext,
-           txt_gp = fpTxtGp(label = list(gpar(cex=1),
-                                         gpar(cex=1),
-                                         gpar(cex=1),
-                                         gpar(cex=1),
-                                         gpar(cex=1))),
-           df_c,new_page = TRUE,
-           boxsize = 0.3,
-           is.summary = c(TRUE, rep(FALSE, 5)),
-           clip = c(1,40),
-           zero=0.5,
-           xticks = c(1,10,20,30,40),
-           xlab = "aOR",
-           colgap=unit(5, "mm"),
-           col = fpColors(box = "royalblue",
-                          line = "darkblue"),
-           vertices = TRUE,
-           lineheight='lines')
+bmp("FigureS4.2.bmp", units="in", width=9, height=3, res=800)
 
-rm(tabletext,df_c)
+forestplot(tabletext_lists,
+                      txt_gp = fpTxtGp(label = list(gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1))),
+                      df_c,new_page = TRUE,
+                      boxsize = 0.3,
+                      is.summary = c(TRUE, rep(FALSE, 5)),
+                      clip = c(1,40),
+                      zero=0.5,
+                      xticks = c(1,10,20,30,40),
+                      xlab = "aOR",
+                      colgap=unit(5, "mm"),
+                      col = fpColors(box = "royalblue",
+                                                    line = "darkblue"),
+                      vertices = TRUE,
+                      lineheight=unit(0.4,'in'))
+
+dev.off()
+
+rm(tabletext,tabletext_lists,df_c)
 
 
 
 
 #df3 density plot
+
+
+install.packages("RColorBrewer")
+library(RColorBrewer)
+library(ggplot2)
+
+mydata3=subset(mydata, spontpreg3==TRUE)
+
+temp=subset(mydata3, select=c("GRDBSpreg3","seq"))
+temp$sequence=as.factor(temp$seq)
+temp=subset(temp, select=c(-seq))
+
+png("Figure1b.png", units="in", width=6.73, height=4.03, res=800)
+
+ggplot(temp, aes(GRDBSpreg3, fill=sequence)) + geom_density(alpha=0.5, size=0.2) +
+    scale_fill_brewer(palette = "Dark2", labels=c("Vaginal - Vaginal","Vaginal - CS","CS - Vaginal", "CS - CS")) +
+    labs(x="Gestational duration of the third pregnancy (days)",
+              y="Proportion",
+              yaxt="n",
+              fill="Previous delivery modes") +
+    geom_vline(xintercept = 259, linetype=3, color="red") +
+    annotate(geom="text", x=235, y=0.05, label="37+0 weeks", color="red") +
+    annotate(geom="text", x=160, y=0.05, label="B", color="red", size=7) +
+    theme(legend.position = c(0.2,0.5)) +
+    theme(axis.text.y = element_blank()) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+    theme(panel.border = element_blank()) +
+    theme(axis.line = element_line(colour = "black"))
+
+dev.off()
+
+rm(mydata3,temp)
+
+
+
+#df3 survival analyses
+
+
+df3surv=mydata[,c("GRDBSpreg3", "spontpreg3", "seq")]
+survobject=Surv(time=df3surv$GRDBSpreg3, event=df3surv$spontpreg3)
+fit=survfit(survobject~seq, data=df3surv)
+ggsurvplot(fit, data=df3surv)
+
+mysurvplot=ggsurvplot(fit, size=0.5, palette = c("orange","purple","blue","green"), lty=c(1:4), xlim=c(154,308), break.x.by=28, ylab="Probability", xlab="Gestational duration of the third pregnancy (days)", pval=TRUE, risk.table=FALSE, legend.labs=c("1st Vaginal - 2nd Vaginal, -","1st Vaginal - 2nd CS,                aHR 0.80 (95% CI 0.77 - 0.84), P <1E-15","1st CS - 2nd Vaginal,                aHR 0.95 (95% CI 0.93 - 0.98), P = 8.7E-5","1st CS - 2nd CS,                              aHR 0.64 (95% CI 0.59 - 0.69), P <1E-15"), lty=c(1:4), legend.title="Previous delivery modes")
+
+mysurvplot$plot <- mysurvplot$plot +
+	geom_segment(aes(x=259,y=0,xend=259,yend=1),linetype="dashed",color="red") + 
+	annotate(geom="text", x=245, y=0.85, label="37+0 weeks", color="red") +
+    annotate(geom="text", x=300, y=0.9, label="B", color="red", size=7) +
+    theme(legend.position = c(0.32, 0.5))
+
+mysurvplot
+
+
+png("Figure4b.png", units="in", width=9, height=4, res=800)
+
+mysurvplot
+
+dev.off()
+
+
+cox1=subset(mydata,vagvag|vagCS)
+cox2=subset(mydata,vagvag|CSvag)
+cox3=subset(mydata,vagvag|CSCS)
+
+cox = coxph(Surv(GRDBSpreg3, spontpreg3) ~ vagCS + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGAmarsalpreg3 + LGAmarsalpreg3, data=cox1)
+summary(cox)
+
+cox = coxph(Surv(GRDBSpreg3, spontpreg3) ~ CSvag + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGAmarsalpreg3 + LGAmarsalpreg3, data=cox2)
+summary(cox)
+
+cox = coxph(Surv(GRDBSpreg3, spontpreg3) ~ CSCS + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGAmarsalpreg3 + LGAmarsalpreg3, data=cox3)
+summary(cox)
+
+rm(df3surv,survobject,fit,ggsurvplot,mysurvplot,cox,cox1,cox2,cox3)
+
+
+
+rm(grav1,grav2,grav3,mydata,mydata2,mydata3)
+
+
+
+
+
+
+
+
+
+#below is for poster
+
+
+tabletext <- cbind(
+    c("Gestational age","","<37+0 w","","<28+0 w","28+0 - 31+6 w","32+0 - 33+6 w","34+0 - 36+6 w","37+0 - 37+6 w","38+0 - 38+6 w","","41+0 - 41+6 w",">41+6 w"),
+    c("aOR (95% CI)","","1.67 (1.57, 1.77)","","1.77 (1.32, 2.33)","1.64 (1.28, 2.06)","2.16 (1.80, 2.57)","1.62 (1.51, 1.72)","1.25 (1.19, 1.32)","1.10 (1.06, 1.14)","","1.24 (1.21, 1.27)","1.55 (1.49, 1.62)"),
+    c("P-value","","<1E-15","","7.4E-5","5.4E-5","<1E-15","<1E-15","<1E-15","2.5E-8","","<1E-15","<1E-15"))
+
+df_c <- data.frame(mean = c(NA,NA,1.67,NA,1.77,1.64,2.16,1.62,1.25,1.10,NA,1.24,1.55),
+                                      lower = c(NA,NA,1.57,NA,1.32,1.28,1.80,1.51,1.19,1.06,NA,1.21,1.49),
+                                      upper = c(NA,NA,1.77,NA,2.33,2.06,2.57,1.72,1.32,1.14,NA,1.27,1.62))
+
+forestplot(tabletext,
+                      txt_gp = fpTxtGp(label = list(gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1))),
+                      df_c,new_page = TRUE,
+                      boxsize = 0.2,
+                      is.summary = c(TRUE, rep(FALSE, 12)),
+                      clip = c(0.7,3.0),
+                      xlab = "aOR",
+                      xlog = FALSE,
+                      zero=1,
+                      colgap=unit(5, "mm"),
+                      col = fpColors(box = "royalblue",
+                                                    line = "darkblue"),
+                      vertices = TRUE,
+                      lineheight='lines')
+
+rm(tabletext,df_c)
+
+
+tabletext <- cbind(
+    c("Sequence","","1st CS - 2nd Vag","1st Vag - 2nd CS","1st Vag - 2nd CS"),
+    c("","","vs","vs","vs"),
+    c("","","1st Vag - 2nd Vag","1st Vag - 2nd Vag","1st CS - 2nd Vag"),
+    c("aOR (95% CI)","","1.15 (0.96, 1.36)","2.50 (2.01, 3.09)","2.25 (1.71, 2.95)"),
+    c("P-value","","0.13","<1E-15","5.4E-9"))
+
+df_c <- data.frame(mean = c(NA,NA,1.15,2.50,2.25),
+                                      lower = c(NA,NA,0.96,2.01,1.71),
+                                      upper = c(NA,NA,1.36,3.09,2.95))
+
+forestplot(tabletext,
+                      txt_gp = fpTxtGp(label = list(gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1),
+                                                                                  gpar(cex=1))),
+                      df_c,new_page = TRUE,
+                      grid=structure(c(log(2.72)),
+                                                    gp=gpar(lty=2,col="#CCCCFF")),
+                      boxsize = 0.3,
+                      is.summary = c(TRUE, rep(FALSE, 5)),
+                      clip = c(0.5,3.5),
+                      zero=0.5,
+                      xlab = "aOR",
+                      xticks = c(0.5,1,1.5,2,2.5,3,3.5),
+                      colgap=unit(5, "mm"),
+                      col = fpColors(box = "royalblue",
+                                                    line = "darkblue"),
+                      vertices = TRUE,
+                      lineheight='lines')
+
+rm(tabletext,df_c)
+
+
 
 
 mydata3=subset(mydata, spontpreg3==TRUE)
@@ -1249,18 +1487,29 @@ theme_set(theme_light())
 
 g <- ggplot(mydata3, aes(GRDBSpreg3))
 
-g + geom_density(aes(fill=factor(seq)), alpha=0.4, size=0.2) + 
-  labs(x="Gestational duration of the third pregnancy (days)",
-       y="Proportion",
-       yaxt="n",
-       fill="Mode of delivery previous pregnancies") +
-  scale_fill_discrete(labels=c("Vaginal - vaginal","Vaginal - CS","CS - vaginal", "CS - CS")) +
-  geom_vline(xintercept = 259, linetype=3, color="red") +
-  annotate(geom="text", x=235, y=0.05, label="37+0 weeks", color="red") +
-  theme(axis.text.y = element_blank()) +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-  theme(panel.border = element_blank()) +
-  theme(axis.line = element_line(colour = "black"))
+g <- g + geom_density(aes(fill=factor(seq)), alpha=0.4, size=0.2) + 
+    labs(x="Gestational duration of the third pregnancy (days)",
+              y="Proportion",
+              yaxt="n",
+              fill="Previous modes of delivery") +
+    scale_fill_discrete(labels=c("Vaginal - Vaginal","Vaginal - CS","CS - Vaginal", "CS - CS")) +
+    geom_vline(xintercept = 259, linetype=3, color="red") +
+    annotate(geom="text", x=235, y=0.05, label="37+0 weeks", color="red") +
+    theme(axis.text.y = element_blank()) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+    theme(panel.border = element_blank()) +
+    theme(axis.line = element_line(colour = "black")) +
+    theme(legend.position = c(0.2, 0.6)) +
+    theme(panel.background = element_rect(fill="#DBE9FA")) +
+    theme(plot.background = element_rect(fill="#DBE9FA")) + 
+    theme(legend.background = element_rect(fill="#DBE9FA"))
+
+
+png("Fig3.png", units="in", width=6, height=4, res=800)
+
+g
+
+dev.off()
 
 rm(g)
 
@@ -1275,40 +1524,33 @@ survobject=Surv(time=df3surv$GRDBSpreg3, event=df3surv$spontpreg3)
 fit=survfit(survobject~seq, data=df3surv)
 ggsurvplot(fit, data=df3surv)
 
-mysurvplot=ggsurvplot(fit, size=0.5, xlim=c(154,308), break.x.by=28, ylab="", xlab="Gestational duration of the third pregnancy (days)", pval=TRUE, risk.table=TRUE, risk.table.title="", risk.table.height=0.3, legend.labs=c("Vaginal - vaginal","Vaginal - CS","CS - vaginal","CS - CS"), legend.title="Previous modes of delivery")
+mysurvplot=ggsurvplot(fit, size=0.5, xlim=c(154,308), break.x.by=28, ylab="Probability", xlab="Gestational duration of the third pregnancy (days)", pval=TRUE, risk.table=FALSE, legend.labs=c("1st Vaginal - 2nd Vaginal","1st Vaginal - 2nd CS","1st CS - 2nd Vaginal","1st CS - 2nd CS"), legend.title="Previous delivery modes")
 
 mysurvplot$plot <- mysurvplot$plot +
-	geom_segment(aes(x=259,y=0,xend=259,yend=1),linetype="dashed",color="red") + 
-	annotate(geom="text", x=245, y=0.75, label="37+0 weeks", color="red")
+    geom_segment(aes(x=259,y=0,xend=259,yend=1),linetype="dashed",color="red") + 
+    annotate(geom="text", x=245, y=0.75, label="37+0 weeks", color="red") +
+    theme(panel.background = element_rect(fill="#DBE9FA")) +
+    theme(legend.position = c(0.32, 0.5)) +
+    theme(plot.background = element_rect(fill="#DBE9FA")) +
+    theme(legend.background = element_rect(fill="#DBE9FA"))
+
+
+png("Fig4.png", units="in", width=7, height=3.5, res=800)
 
 mysurvplot
 
-
-cox = coxph(Surv(GRDBSpreg3, spontpreg3) ~ seq + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGAmarsalpreg3 + LGAmarsalpreg3, data=mydata)
-summary(cox)
+dev.off()
 
 
-cox = coxph(Surv(GRDBSpreg3, spontpreg3) ~ vagvag + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGAmarsalpreg3 + LGAmarsalpreg3, data=mydata)
-summary(cox)
 
 
-cox = coxph(Surv(GRDBSpreg3, spontpreg3) ~ vagCS + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGAmarsalpreg3 + LGAmarsalpreg3, data=mydata)
-summary(cox)
-
-
-cox = coxph(Surv(GRDBSpreg3, spontpreg3) ~ CSvag + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGAmarsalpreg3 + LGAmarsalpreg3, data=mydata)
-summary(cox)
-
-
-cox = coxph(Surv(GRDBSpreg3, spontpreg3) ~ CSCS + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGAmarsalpreg3 + LGAmarsalpreg3, data=mydata)
-summary(cox)
-
-
-cox = coxph(Surv(GRDBSpreg3, spontpreg3) ~ vagvag + vagCS + CSvag + CSCS + MALDERpreg3 + BMIpreg3 + notborninswepreg3 + smokepreg3 + diabetespreg3 + allHTNpreg3 + boychildpreg3 + malformpreg3 + SGAmarsalpreg3 + LGAmarsalpreg3, data=mydata)
-summary(cox)
-
-
-rm(df3surv,survobject,fit,ggsurvplot,mysurvplot,cox)
+rm(df3surv,survobject,fit,ggsurvplot,mysurvplot,g)
 
 
 rm(grav1,grav2,grav3,mydata,mydata2,mydata3)
+
+
+
+
+
+
